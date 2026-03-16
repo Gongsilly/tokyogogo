@@ -70,18 +70,22 @@
     };
 
     /* 지도 루트 좌표 */
+    const HOTEL_POS = [35.6728, 139.7366]; // 아카사카 어반 호텔 신관
+    const NRT_POS   = [35.7647, 140.3864]; // 나리타국제공항
+
     const MAP_ROUTES = [
-      { // Day1 - violet
-        coords: [[35.6728,139.7366],[35.6735,139.7361]],
+      { // Day1 - violet: 나리타공항 → (리무진버스) → 호텔 → SEIJO ISHII
+        coords: [NRT_POS, HOTEL_POS, [35.6735,139.7361]],
         markers: [
-          { pos:[35.6728,139.7366], em:"🏨", name:"아카사카 어반 호텔", time:"21:00" },
+          { pos:NRT_POS,            em:"✈️", name:"나리타공항 도착 (LJ209)", time:"17:15" },
+          { pos:HOTEL_POS,          em:"🏨", name:"아카사카 어반 호텔 체크인", time:"21:00" },
           { pos:[35.6735,139.7361], em:"🛒", name:"SEIJO ISHII", time:"21:30" },
         ],
       },
-      { // Day2 - pink
-        coords: [[35.6728,139.7366],[35.6748,139.7622],[35.6717,139.7651],[35.6706,139.7646],[35.6607,139.7296],[35.6631,139.7315]],
+      { // Day2 - pink: 호텔 → 유라쿠초 → 긴자 → 롯폰기
+        coords: [HOTEL_POS,[35.6748,139.7622],[35.6717,139.7651],[35.6706,139.7646],[35.6607,139.7296],[35.6631,139.7315]],
         markers: [
-          { pos:[35.6728,139.7366], em:"🏨", name:"호텔 출발", time:"09:00" },
+          { pos:HOTEL_POS,          em:"🏨", name:"호텔 출발", time:"09:00" },
           { pos:[35.6748,139.7622], em:"🍡", name:"유라쿠초 (하카타 만쥬)", time:"10:00" },
           { pos:[35.6717,139.7651], em:"🛍️", name:"긴자 (로프트·MUJI 등)", time:"10:30" },
           { pos:[35.6720,139.7658], em:"🥞", name:"빌스 긴자", time:"13:00" },
@@ -90,10 +94,11 @@
           { pos:[35.6631,139.7315], em:"🛒", name:"동키호테 롯폰기", time:"19:30" },
         ],
       },
-      { // Day3 - amber
-        coords: [[35.6612,139.7332],[35.6896,139.7006],[35.6851,139.7100],[35.6618,139.6984],[35.6580,139.7016],[35.6702,139.7027],[35.6695,139.7044]],
+      { // Day3 - amber: 호텔 → 롯폰기공원 → 신주쿠 → 시부야 → 하라주쿠
+        coords: [HOTEL_POS,[35.6612,139.7332],[35.6896,139.7006],[35.6851,139.7100],[35.6618,139.6984],[35.6580,139.7016],[35.6702,139.7027],[35.6695,139.7044]],
         markers: [
-          { pos:[35.6612,139.7332], em:"🌳", name:"롯폰기 공원 산책", time:"09:00" },
+          { pos:HOTEL_POS,          em:"🏨", name:"호텔 출발", time:"09:00" },
+          { pos:[35.6612,139.7332], em:"🌳", name:"롯폰기 공원 산책", time:"09:10" },
           { pos:[35.6896,139.7006], em:"🏰", name:"신주쿠 (디즈니·MUJI 등)", time:"10:00" },
           { pos:[35.6851,139.7100], em:"🌸", name:"신주쿠 교엔", time:"15:00" },
           { pos:[35.6618,139.6984], em:"🎮", name:"파르코·포켓몬센터", time:"16:00" },
@@ -102,13 +107,14 @@
           { pos:[35.6695,139.7044], em:"🥩", name:"레드락 (로스트비프)", time:"19:30" },
         ],
       },
-      { // Day4 - green
-        coords: [[35.6745,139.7390],[35.6733,139.7365],[35.6745,139.7335],[35.6728,139.7366]],
+      { // Day4 - green: 호텔 → 히에신사 → 스기약국 → 라멘 → (리무진버스) → 나리타공항
+        coords: [HOTEL_POS,[35.6745,139.7390],[35.6733,139.7365],[35.6745,139.7335],HOTEL_POS,NRT_POS],
         markers: [
+          { pos:HOTEL_POS,          em:"🏨", name:"호텔 출발", time:"09:00" },
           { pos:[35.6745,139.7390], em:"⛩️", name:"히에 신사", time:"09:00" },
           { pos:[35.6733,139.7365], em:"💊", name:"스기약국 (보충쇼핑)", time:"10:00" },
           { pos:[35.6745,139.7335], em:"🍜", name:"모슈 라멘 (점심)", time:"12:00" },
-          { pos:[35.6728,139.7366], em:"🚌", name:"공항리무진 출발", time:"16:00" },
+          { pos:NRT_POS,            em:"🛫", name:"나리타공항 출발 (LJ212)", time:"19:15" },
         ],
       },
     ];
@@ -265,8 +271,62 @@
           });
         });
 
-        // 도쿄 영역에 맞춤
-        map.fitBounds([[35.55, 139.60], [35.78, 139.85]], { padding: [16, 16] });
+        // 호텔 고정 마커 (항상 표시)
+        const hotelIcon = L.divIcon({
+          className: '',
+          html: `<div style="
+            background:#fff;border-radius:50%;
+            width:40px;height:40px;
+            display:flex;align-items:center;justify-content:center;
+            font-size:20px;border:3px solid #f43f5e;
+            box-shadow:0 3px 12px rgba(0,0,0,.35);
+            position:relative;">🏨
+            <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
+              background:#f43f5e;color:#fff;font-size:9px;font-weight:800;
+              border-radius:4px;padding:1px 4px;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">
+              숙소
+            </div>
+          </div>`,
+          iconSize: [40, 46], iconAnchor: [20, 46],
+        });
+        L.marker(HOTEL_POS, { icon: hotelIcon, zIndexOffset: 1000 })
+          .bindPopup(`<div style="font-family:'Noto Sans KR',sans-serif;">
+            <div style="font-weight:800;color:#f43f5e;font-size:13px;margin-bottom:4px;">🏨 숙소 (매일 베이스캠프)</div>
+            <div style="font-weight:700;font-size:14px;margin-bottom:2px;">아카사카 어반 호텔 신관</div>
+            <div style="color:#6b7280;font-size:12px;">4/10 체크인 · 4/13 체크아웃</div>
+            <a href="https://www.google.com/maps/search/Akasaka+Urban+Hotel+Annex+Tokyo"
+              target="_blank" style="color:#3b82f6;font-size:12px;font-weight:600;">📍 Google Maps</a>
+          </div>`)
+          .addTo(map);
+
+        // 나리타공항 고정 마커
+        const nrtIcon = L.divIcon({
+          className: '',
+          html: `<div style="
+            background:#fff;border-radius:50%;
+            width:36px;height:36px;
+            display:flex;align-items:center;justify-content:center;
+            font-size:18px;border:3px solid #8B5CF6;
+            box-shadow:0 3px 12px rgba(0,0,0,.3);
+            position:relative;">✈️
+            <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
+              background:#8B5CF6;color:#fff;font-size:9px;font-weight:800;
+              border-radius:4px;padding:1px 4px;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">
+              NRT
+            </div>
+          </div>`,
+          iconSize: [36, 42], iconAnchor: [18, 42],
+        });
+        L.marker(NRT_POS, { icon: nrtIcon, zIndexOffset: 900 })
+          .bindPopup(`<div style="font-family:'Noto Sans KR',sans-serif;">
+            <div style="font-weight:800;color:#8B5CF6;font-size:13px;margin-bottom:4px;">✈️ 나리타국제공항 (NRT)</div>
+            <div style="font-size:12px;color:#374151;">🛬 Day1 LJ209 · 17:15 도착</div>
+            <div style="font-size:12px;color:#374151;">🛫 Day4 LJ212 · 19:15 출발</div>
+          </div>`)
+          .addTo(map);
+
+        // 나리타 포함 전체 범위에 맞춤
+        map.fitBounds([[35.54, 139.55], [35.82, 140.50]], { padding: [20, 20] });
         mapInst.current = map;
       }, []);
 
@@ -310,7 +370,7 @@
                   <span className="text-xs text-gray-600 font-medium">{d.emoji} {d.day} {d.date}({d.week})</span>
                 </div>
               ))}
-              <p className="w-full text-xs text-gray-400 mt-0.5">* 나리타공항 구간은 범위 외 (약 60km) · 점선 = 리무진버스</p>
+              <p className="w-full text-xs text-gray-400 mt-0.5">* 🏨 = 아카사카 어반 호텔 (매일 베이스캠프) · ✈️ = 나리타공항 · 점선 = 리무진버스 구간</p>
             </div>
           </div>
 

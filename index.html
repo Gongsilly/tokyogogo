@@ -84,6 +84,7 @@
         { id:"d0p4", time:"21:30", name:"SEIJO ISHII (세이죠이시이)", detail:"숙소 근처 고급 슈퍼 · 야식 & 간식",         cat:"쇼핑", map:"Seijo Ishii Akasaka Tokyo",               pos: [35.6735, 139.7361] },
       ]},
       { ...DAY_CFG[1], places: [
+        { id:"d1p_s", time:"08:30", name:"아카사카 어반 호텔 출발", detail:"Day2 시작 · 편의점 조식 후 출발",               cat:"숙소", map:"Akasaka Urban Hotel Annex Tokyo",          pos: HOTEL_POS },
         { id:"d1p0",  time:"09:00", name:"편의점 조식",             detail:"호텔 근처 편의점",                             cat:"맛집", map:"Convenience store Akasaka Tokyo",           pos: HOTEL_POS },
         { id:"d1p1",  time:"10:00", name:"하카타유라쿠초 (만쥬)",  detail:"유라쿠초 명물 만쥬",                            cat:"맛집", map:"博多風美庵 有楽町 Tokyo",                   pos: [35.6748, 139.7622] },
         { id:"d1p2",  time:"10:30", name:"긴자 로프트",             detail:"생활잡화 & 문구 쇼핑",                          cat:"쇼핑", map:"Ginza Loft Tokyo",                          pos: [35.6717, 139.7651] },
@@ -102,6 +103,7 @@
         { id:"d1p15", time:"19:30", name:"동키호테 롯폰기점",       detail:"심야 쇼핑 & 기념품",                            cat:"쇼핑", map:"Don Quijote Roppongi Tokyo",               pos: [35.6631, 139.7315] },
       ]},
       { ...DAY_CFG[2], places: [
+        { id:"d2p_s", time:"08:30", name:"아카사카 어반 호텔 출발", detail:"Day3 시작 · 롯폰기 공원 방향 출발",             cat:"숙소", map:"Akasaka Urban Hotel Annex Tokyo",          pos: HOTEL_POS },
         { id:"d2p0",  time:"09:00", name:"롯폰기 공원 산책",        detail:"아침 스근하게 공원 산책",                       cat:"관광", map:"Roppongi Park Tokyo",                       pos: [35.6612, 139.7332] },
         { id:"d2p1",  time:"10:00", name:"디즈니 플래그십스토어",   detail:"신주쿠 / 디즈니 공식 대형 스토어",               cat:"쇼핑", map:"Disney flagship store Shinjuku Tokyo",      pos: [35.6896, 139.7006] },
         { id:"d2p2",  time:"10:30", name:"니큐토 타마고",           detail:"신주쿠 유명 달걀 간식",                         cat:"맛집", map:"二丁目のたまご Shinjuku Tokyo",              pos: [35.6890, 139.7010] },
@@ -119,6 +121,7 @@
         { id:"d2p14", time:"20:30", name:"코스메 도쿄",             detail:"화장품 & 뷰티 쇼핑",                            cat:"쇼핑", map:"Cosme Tokyo Harajuku",                      pos: [35.6698, 139.7040] },
       ]},
       { ...DAY_CFG[3], places: [
+        { id:"d3p_s", time:"08:00", name:"아카사카 어반 호텔 체크아웃", detail:"3박 체크아웃 · 짐 맡기고 마지막 하루 시작", cat:"숙소", map:"Akasaka Urban Hotel Annex Tokyo",          pos: HOTEL_POS },
         { id:"d3p0", time:"09:00", name:"히에 신사",               detail:"아카사카 / 신사 참배",                          cat:"관광", map:"Hie Shrine Akasaka Tokyo",                  pos: [35.6745, 139.7390] },
         { id:"d3p1", time:"10:00", name:"스기약국",                detail:"보충 쇼핑 / 마지막 기념품",                      cat:"쇼핑", map:"Sugiya Akasaka Tokyo",                      pos: [35.6733, 139.7365] },
         { id:"d3p2", time:"12:00", name:"점심 — 모슈 라멘",        detail:"도쿄 마지막 점심식사 🥺",                        cat:"맛집", map:"もつ次郎 Akasaka Tokyo",                   pos: [35.6745, 139.7335] },
@@ -709,10 +712,16 @@
     function App() {
       const [tab, setTab] = useState('home');
 
+      const DATA_VERSION = '2025-v2'; // 데이터 구조 변경 시 버전 올리기
       const [travelData, setTravelData] = useState(() => {
         try {
+          const ver   = localStorage.getItem('tokyogogo-version');
           const saved = localStorage.getItem('tokyogogo-travel');
-          return saved ? JSON.parse(saved) : TRAVEL_INITIAL;
+          if (saved && ver === DATA_VERSION) return JSON.parse(saved);
+          // 버전 불일치 or 저장 없음 → 초기 데이터
+          localStorage.setItem('tokyogogo-version', DATA_VERSION);
+          localStorage.removeItem('tokyogogo-travel');
+          return TRAVEL_INITIAL;
         } catch { return TRAVEL_INITIAL; }
       });
 

@@ -27,17 +27,17 @@
     .tab-btn { transition: all 0.2s; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .fade-in { animation: fadeIn 0.25s ease-out; }
-    /* Bottom nav */
-    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .modal-box { background: #fff; border-radius: 16px; padding: 20px; width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto; }
   </style>
 </head>
 <body class="bg-slate-50">
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+    const { useState, useEffect, useRef, useCallback } = React;
 
-    /* ─────────────── 설정 & 데이터 ─────────────── */
+    /* ─────────────── 설정 ─────────────── */
 
     const TRIP = {
       title: "햄삐햄삐 도쿄여행 ❤️",
@@ -51,13 +51,13 @@
 
     const DAY_CFG = [
       { idx:0, day:"Day 1", date:"4/10", week:"목", emoji:"✈️", theme:"입국의 날",
-        color:"#8B5CF6", light:"#EDE9FE", grad:"from-violet-500 to-purple-700", tabActive:"bg-violet-500" },
+        color:"#8B5CF6", light:"#EDE9FE", grad:"from-violet-500 to-purple-700" },
       { idx:1, day:"Day 2", date:"4/11", week:"금", emoji:"🌃", theme:"긴자 & 롯폰기",
-        color:"#EC4899", light:"#FCE7F3", grad:"from-pink-500 to-rose-600", tabActive:"bg-pink-500" },
+        color:"#EC4899", light:"#FCE7F3", grad:"from-pink-500 to-rose-600" },
       { idx:2, day:"Day 3", date:"4/12", week:"토", emoji:"🌸", theme:"신주쿠 & 시부야 & 하라주쿠",
-        color:"#F59E0B", light:"#FEF3C7", grad:"from-amber-500 to-orange-500", tabActive:"bg-amber-500" },
+        color:"#F59E0B", light:"#FEF3C7", grad:"from-amber-500 to-orange-500" },
       { idx:3, day:"Day 4", date:"4/13", week:"일", emoji:"🏠", theme:"귀국의 날",
-        color:"#10B981", light:"#D1FAE5", grad:"from-emerald-500 to-teal-600", tabActive:"bg-emerald-500" },
+        color:"#10B981", light:"#D1FAE5", grad:"from-emerald-500 to-teal-600" },
     ];
 
     const CAT = {
@@ -69,107 +69,62 @@
       카페: { icon:"☕", bg:"bg-amber-50",  text:"text-amber-600",  border:"border-amber-200" },
     };
 
-    /* 지도 루트 좌표 */
-    const HOTEL_POS = [35.6728, 139.7366]; // 아카사카 어반 호텔 신관
-    const NRT_POS   = [35.7647, 140.3864]; // 나리타국제공항
+    const HOTEL_POS = [35.6728, 139.7366];
+    const NRT_POS   = [35.7647, 140.3864];
+    const ICN_POS   = [37.4602, 126.4407];
 
-    const MAP_ROUTES = [
-      { // Day1 - violet: 나리타공항 → (리무진버스) → 호텔 → SEIJO ISHII
-        coords: [NRT_POS, HOTEL_POS, [35.6735,139.7361]],
-        markers: [
-          { pos:NRT_POS,            em:"✈️", name:"나리타공항 도착 (LJ209)", time:"17:15" },
-          { pos:HOTEL_POS,          em:"🏨", name:"아카사카 어반 호텔 체크인", time:"21:00" },
-          { pos:[35.6735,139.7361], em:"🛒", name:"SEIJO ISHII", time:"21:30" },
-        ],
-      },
-      { // Day2 - pink: 호텔 → 유라쿠초 → 긴자 → 롯폰기
-        coords: [HOTEL_POS,[35.6748,139.7622],[35.6717,139.7651],[35.6706,139.7646],[35.6607,139.7296],[35.6631,139.7315]],
-        markers: [
-          { pos:HOTEL_POS,          em:"🏨", name:"호텔 출발", time:"09:00" },
-          { pos:[35.6748,139.7622], em:"🍡", name:"유라쿠초 (하카타 만쥬)", time:"10:00" },
-          { pos:[35.6717,139.7651], em:"🛍️", name:"긴자 (로프트·MUJI 등)", time:"10:30" },
-          { pos:[35.6720,139.7658], em:"🥞", name:"빌스 긴자", time:"13:00" },
-          { pos:[35.6706,139.7646], em:"☕", name:"마리아쥬 프레르", time:"14:30" },
-          { pos:[35.6607,139.7296], em:"🌃", name:"롯폰기힐즈 야경", time:"18:00" },
-          { pos:[35.6631,139.7315], em:"🛒", name:"동키호테 롯폰기", time:"19:30" },
-        ],
-      },
-      { // Day3 - amber: 호텔 → 롯폰기공원 → 신주쿠 → 시부야 → 하라주쿠
-        coords: [HOTEL_POS,[35.6612,139.7332],[35.6896,139.7006],[35.6851,139.7100],[35.6618,139.6984],[35.6580,139.7016],[35.6702,139.7027],[35.6695,139.7044]],
-        markers: [
-          { pos:HOTEL_POS,          em:"🏨", name:"호텔 출발", time:"09:00" },
-          { pos:[35.6612,139.7332], em:"🌳", name:"롯폰기 공원 산책", time:"09:10" },
-          { pos:[35.6896,139.7006], em:"🏰", name:"신주쿠 (디즈니·MUJI 등)", time:"10:00" },
-          { pos:[35.6851,139.7100], em:"🌸", name:"신주쿠 교엔", time:"15:00" },
-          { pos:[35.6618,139.6984], em:"🎮", name:"파르코·포켓몬센터", time:"16:00" },
-          { pos:[35.6580,139.7016], em:"🌆", name:"시부야 스크램블·스카이", time:"17:00" },
-          { pos:[35.6702,139.7027], em:"👗", name:"하라주쿠 타케시타", time:"18:30" },
-          { pos:[35.6695,139.7044], em:"🥩", name:"레드락 (로스트비프)", time:"19:30" },
-        ],
-      },
-      { // Day4 - green: 호텔 → 히에신사 → 스기약국 → 라멘 → (리무진버스) → 나리타공항
-        coords: [HOTEL_POS,[35.6745,139.7390],[35.6733,139.7365],[35.6745,139.7335],HOTEL_POS,NRT_POS],
-        markers: [
-          { pos:HOTEL_POS,          em:"🏨", name:"호텔 출발", time:"09:00" },
-          { pos:[35.6745,139.7390], em:"⛩️", name:"히에 신사", time:"09:00" },
-          { pos:[35.6733,139.7365], em:"💊", name:"스기약국 (보충쇼핑)", time:"10:00" },
-          { pos:[35.6745,139.7335], em:"🍜", name:"모슈 라멘 (점심)", time:"12:00" },
-          { pos:NRT_POS,            em:"🛫", name:"나리타공항 출발 (LJ212)", time:"19:15" },
-        ],
-      },
-    ];
+    /* ─────────────── 초기 여행 데이터 (pos 포함) ─────────────── */
 
-    /* 여행 일정 데이터 */
-    const TRAVEL = [
+    const TRAVEL_INITIAL = [
       { ...DAY_CFG[0], places: [
-        { time:"14:45", name:"인천국제공항 출발",     detail:"LJ209 탑승 · NRT 17:15 도착",                      cat:"교통", map:"Incheon International Airport" },
-        { time:"17:15", name:"나리타국제공항 도착",   detail:"입국수속 · 수하물 수취",                             cat:"교통", map:"Narita International Airport" },
-        { time:"18:30", name:"공항리무진 버스",        detail:"나리타 → 아카사카 · 약 2시간 30분",                  cat:"교통", map:"Narita Airport Limousine Bus Tokyo" },
-        { time:"21:00", name:"아카사카 어반 호텔 신관",detail:"체크인 · 3박 숙소",                                  cat:"숙소", map:"Akasaka Urban Hotel Annex Tokyo" },
-        { time:"21:30", name:"SEIJO ISHII (세이죠이시이)",detail:"숙소 근처 고급 슈퍼 · 야식 & 간식",              cat:"쇼핑", map:"Seijo Ishii Akasaka Tokyo" },
+        { id:"d0p0", time:"14:45", name:"인천국제공항 출발",       detail:"LJ209 탑승 · NRT 17:15 도착",               cat:"교통", map:"Incheon International Airport",           pos: ICN_POS },
+        { id:"d0p1", time:"17:15", name:"나리타국제공항 도착",     detail:"입국수속 · 수하물 수취",                       cat:"교통", map:"Narita International Airport",             pos: NRT_POS },
+        { id:"d0p2", time:"18:30", name:"공항리무진 버스",          detail:"나리타 → 아카사카 · 약 2시간 30분",            cat:"교통", map:"Narita Airport Limousine Bus Tokyo",        pos: null },
+        { id:"d0p3", time:"21:00", name:"아카사카 어반 호텔 신관", detail:"체크인 · 3박 숙소",                            cat:"숙소", map:"Akasaka Urban Hotel Annex Tokyo",          pos: HOTEL_POS },
+        { id:"d0p4", time:"21:30", name:"SEIJO ISHII (세이죠이시이)", detail:"숙소 근처 고급 슈퍼 · 야식 & 간식",         cat:"쇼핑", map:"Seijo Ishii Akasaka Tokyo",               pos: [35.6735, 139.7361] },
       ]},
       { ...DAY_CFG[1], places: [
-        { time:"09:00", name:"편의점 조식",            detail:"호텔 근처 편의점",                                    cat:"맛집", map:"Convenience store Akasaka Tokyo" },
-        { time:"10:00", name:"하카타유라쿠초 (만쥬)",  detail:"유라쿠초 명물 만쥬",                                  cat:"맛집", map:"博多風美庵 有楽町 Tokyo" },
-        { time:"10:30", name:"긴자 로프트",            detail:"생활잡화 & 문구 쇼핑",                                cat:"쇼핑", map:"Ginza Loft Tokyo" },
-        { time:"11:00", name:"핸즈 (Hands)",           detail:"다양한 생활용품 & 잡화",                              cat:"쇼핑", map:"Hands Ginza Tokyo" },
-        { time:"11:30", name:"무인양품 (MUJI)",        detail:"긴자 플래그십 스토어",                                cat:"쇼핑", map:"MUJI Ginza Tokyo" },
-        { time:"12:00", name:"스탠다드프로덕트",       detail:"다이소 프리미엄 라인",                                cat:"쇼핑", map:"Standard Products Ginza Tokyo" },
-        { time:"12:30", name:"이토야",                 detail:"긴자 유명 고급 문구점",                               cat:"쇼핑", map:"Itoya Ginza Tokyo" },
-        { time:"13:00", name:"빌스 (bills)",           detail:"세계 최고의 아침식사 레스토랑",                        cat:"맛집", map:"bills Ginza Tokyo" },
-        { time:"14:00", name:"도버 스트리트 마켓",     detail:"컨셉 멀티샵 / 명품 & 아트",                           cat:"쇼핑", map:"Dover Street Market Ginza Tokyo" },
-        { time:"14:30", name:"마리아쥬 프레르",        detail:"프랑스 유명 티 살롱",                                 cat:"카페", map:"Mariage Freres Ginza Tokyo" },
-        { time:"15:00", name:"Seisuke Knife",          detail:"일본 전통 식도 & 칼 전문점",                          cat:"쇼핑", map:"Seisuke Knife Ginza Tokyo" },
-        { time:"15:30", name:"스시마도리",             detail:"예약 가능 스시 맛집",                                 cat:"맛집", map:"Sushi Madori Ginza Tokyo" },
-        { time:"16:30", name:"시아와세노 팬케이크",    detail:"행복의 팬케이크 / 휴식 & 디저트",                     cat:"카페", map:"幸せのパンケーキ Ginza Tokyo" },
-        { time:"18:00", name:"롯폰기힐즈",             detail:"야경 감상 & 쇼핑",                                    cat:"관광", map:"Roppongi Hills Tokyo" },
-        { time:"18:30", name:"롯폰기 꽃차 카페",       detail:"꽃차 전문 카페 롯폰기점",                             cat:"카페", map:"flower tea cafe Roppongi Tokyo" },
-        { time:"19:30", name:"동키호테 롯폰기점",      detail:"심야 쇼핑 & 기념품",                                  cat:"쇼핑", map:"Don Quijote Roppongi Tokyo" },
+        { id:"d1p0",  time:"09:00", name:"편의점 조식",             detail:"호텔 근처 편의점",                             cat:"맛집", map:"Convenience store Akasaka Tokyo",           pos: HOTEL_POS },
+        { id:"d1p1",  time:"10:00", name:"하카타유라쿠초 (만쥬)",  detail:"유라쿠초 명물 만쥬",                            cat:"맛집", map:"博多風美庵 有楽町 Tokyo",                   pos: [35.6748, 139.7622] },
+        { id:"d1p2",  time:"10:30", name:"긴자 로프트",             detail:"생활잡화 & 문구 쇼핑",                          cat:"쇼핑", map:"Ginza Loft Tokyo",                          pos: [35.6717, 139.7651] },
+        { id:"d1p3",  time:"11:00", name:"핸즈 (Hands)",            detail:"다양한 생활용품 & 잡화",                        cat:"쇼핑", map:"Hands Ginza Tokyo",                         pos: [35.6715, 139.7648] },
+        { id:"d1p4",  time:"11:30", name:"무인양품 (MUJI)",         detail:"긴자 플래그십 스토어",                          cat:"쇼핑", map:"MUJI Ginza Tokyo",                          pos: [35.6718, 139.7655] },
+        { id:"d1p5",  time:"12:00", name:"스탠다드프로덕트",        detail:"다이소 프리미엄 라인",                          cat:"쇼핑", map:"Standard Products Ginza Tokyo",             pos: [35.6716, 139.7650] },
+        { id:"d1p6",  time:"12:30", name:"이토야",                  detail:"긴자 유명 고급 문구점",                         cat:"쇼핑", map:"Itoya Ginza Tokyo",                         pos: [35.6721, 139.7653] },
+        { id:"d1p7",  time:"13:00", name:"빌스 (bills)",            detail:"세계 최고의 아침식사 레스토랑",                  cat:"맛집", map:"bills Ginza Tokyo",                        pos: [35.6720, 139.7658] },
+        { id:"d1p8",  time:"14:00", name:"도버 스트리트 마켓",      detail:"컨셉 멀티샵 / 명품 & 아트",                     cat:"쇼핑", map:"Dover Street Market Ginza Tokyo",          pos: [35.6714, 139.7660] },
+        { id:"d1p9",  time:"14:30", name:"마리아쥬 프레르",         detail:"프랑스 유명 티 살롱",                           cat:"카페", map:"Mariage Freres Ginza Tokyo",               pos: [35.6706, 139.7646] },
+        { id:"d1p10", time:"15:00", name:"Seisuke Knife",           detail:"일본 전통 식도 & 칼 전문점",                    cat:"쇼핑", map:"Seisuke Knife Ginza Tokyo",                pos: [35.6710, 139.7655] },
+        { id:"d1p11", time:"15:30", name:"스시마도리",              detail:"예약 가능 스시 맛집",                           cat:"맛집", map:"Sushi Madori Ginza Tokyo",                 pos: [35.6712, 139.7652] },
+        { id:"d1p12", time:"16:30", name:"시아와세노 팬케이크",     detail:"행복의 팬케이크 / 휴식 & 디저트",               cat:"카페", map:"幸せのパンケーキ Ginza Tokyo",              pos: [35.6718, 139.7649] },
+        { id:"d1p13", time:"18:00", name:"롯폰기힐즈",              detail:"야경 감상 & 쇼핑",                              cat:"관광", map:"Roppongi Hills Tokyo",                     pos: [35.6607, 139.7296] },
+        { id:"d1p14", time:"18:30", name:"롯폰기 꽃차 카페",        detail:"꽃차 전문 카페 롯폰기점",                       cat:"카페", map:"flower tea cafe Roppongi Tokyo",           pos: [35.6625, 139.7310] },
+        { id:"d1p15", time:"19:30", name:"동키호테 롯폰기점",       detail:"심야 쇼핑 & 기념품",                            cat:"쇼핑", map:"Don Quijote Roppongi Tokyo",               pos: [35.6631, 139.7315] },
       ]},
       { ...DAY_CFG[2], places: [
-        { time:"09:00", name:"롯폰기 공원 산책",       detail:"아침 스근하게 공원 산책",                             cat:"관광", map:"Roppongi Park Tokyo" },
-        { time:"10:00", name:"디즈니 플래그십스토어",  detail:"신주쿠 / 디즈니 공식 대형 스토어",                    cat:"쇼핑", map:"Disney flagship store Shinjuku Tokyo" },
-        { time:"10:30", name:"니큐토 타마고",          detail:"신주쿠 유명 달걀 간식",                               cat:"맛집", map:"二丁目のたまご Shinjuku Tokyo" },
-        { time:"12:00", name:"SHIRO (점심)",           detail:"신주쿠 Newoman 내 레스토랑",                           cat:"맛집", map:"SHIRO Shinjuku Newoman Tokyo" },
-        { time:"13:00", name:"Slow Newoman (가족선물)",detail:"가족 선물 쇼핑 / 신주쿠 루미네",                       cat:"쇼핑", map:"Newoman Shinjuku Tokyo" },
-        { time:"14:00", name:"카페 알리아",            detail:"신주쿠 감성 카페",                                    cat:"카페", map:"Cafe Alia Shinjuku Tokyo" },
-        { time:"15:00", name:"신주쿠 교엔",            detail:"국립 정원 / 봄 벚꽃 산책",                            cat:"관광", map:"Shinjuku Gyoen National Garden" },
-        { time:"16:00", name:"파르코 (PARCO)",         detail:"시부야 / 트렌디한 쇼핑몰",                            cat:"쇼핑", map:"PARCO Shibuya Tokyo" },
-        { time:"16:30", name:"포켓몬센터 시부야",      detail:"포켓몬 공식 스토어",                                  cat:"쇼핑", map:"Pokemon Center Mega Tokyo Shibuya" },
-        { time:"17:00", name:"시부야 스크램블 교차로", detail:"세계에서 가장 바쁜 교차로",                            cat:"관광", map:"Shibuya Scramble Crossing Tokyo" },
-        { time:"17:30", name:"시부야스카이 (일몰)",    detail:"시부야 옥상 전망대 · 일몰 감상",                      cat:"관광", map:"Shibuya Sky observation deck Tokyo" },
-        { time:"18:30", name:"하라주쿠 타케시타 거리", detail:"하라주쿠 탐방",                                        cat:"관광", map:"Harajuku Takeshita Street Tokyo" },
-        { time:"19:00", name:"니코앤도쿄",             detail:"잡화몰 쇼핑",                                         cat:"쇼핑", map:"niko and TOKYO Harajuku" },
-        { time:"19:30", name:"레드락 (Red Rock)",      detail:"하라주쿠 유명 로스트비프 덮밥",                        cat:"맛집", map:"Red Rock Harajuku Tokyo" },
-        { time:"20:30", name:"코스메 도쿄",            detail:"화장품 & 뷰티 쇼핑",                                  cat:"쇼핑", map:"Cosme Tokyo Harajuku" },
+        { id:"d2p0",  time:"09:00", name:"롯폰기 공원 산책",        detail:"아침 스근하게 공원 산책",                       cat:"관광", map:"Roppongi Park Tokyo",                       pos: [35.6612, 139.7332] },
+        { id:"d2p1",  time:"10:00", name:"디즈니 플래그십스토어",   detail:"신주쿠 / 디즈니 공식 대형 스토어",               cat:"쇼핑", map:"Disney flagship store Shinjuku Tokyo",      pos: [35.6896, 139.7006] },
+        { id:"d2p2",  time:"10:30", name:"니큐토 타마고",           detail:"신주쿠 유명 달걀 간식",                         cat:"맛집", map:"二丁目のたまご Shinjuku Tokyo",              pos: [35.6890, 139.7010] },
+        { id:"d2p3",  time:"12:00", name:"SHIRO (점심)",            detail:"신주쿠 Newoman 내 레스토랑",                    cat:"맛집", map:"SHIRO Shinjuku Newoman Tokyo",              pos: [35.6891, 139.7011] },
+        { id:"d2p4",  time:"13:00", name:"Slow Newoman (가족선물)", detail:"가족 선물 쇼핑 / 신주쿠 루미네",                 cat:"쇼핑", map:"Newoman Shinjuku Tokyo",                    pos: [35.6895, 139.7012] },
+        { id:"d2p5",  time:"14:00", name:"카페 알리아",             detail:"신주쿠 감성 카페",                              cat:"카페", map:"Cafe Alia Shinjuku Tokyo",                  pos: [35.6900, 139.7015] },
+        { id:"d2p6",  time:"15:00", name:"신주쿠 교엔",             detail:"국립 정원 / 봄 벚꽃 산책",                      cat:"관광", map:"Shinjuku Gyoen National Garden",            pos: [35.6851, 139.7100] },
+        { id:"d2p7",  time:"16:00", name:"파르코 (PARCO)",          detail:"시부야 / 트렌디한 쇼핑몰",                      cat:"쇼핑", map:"PARCO Shibuya Tokyo",                       pos: [35.6618, 139.6984] },
+        { id:"d2p8",  time:"16:30", name:"포켓몬센터 시부야",       detail:"포켓몬 공식 스토어",                            cat:"쇼핑", map:"Pokemon Center Mega Tokyo Shibuya",         pos: [35.6620, 139.6980] },
+        { id:"d2p9",  time:"17:00", name:"시부야 스크램블 교차로",  detail:"세계에서 가장 바쁜 교차로",                      cat:"관광", map:"Shibuya Scramble Crossing Tokyo",           pos: [35.6580, 139.7016] },
+        { id:"d2p10", time:"17:30", name:"시부야스카이 (일몰)",     detail:"시부야 옥상 전망대 · 일몰 감상",                 cat:"관광", map:"Shibuya Sky observation deck Tokyo",        pos: [35.6584, 139.7017] },
+        { id:"d2p11", time:"18:30", name:"하라주쿠 타케시타 거리",  detail:"하라주쿠 탐방",                                 cat:"관광", map:"Harajuku Takeshita Street Tokyo",           pos: [35.6702, 139.7027] },
+        { id:"d2p12", time:"19:00", name:"니코앤도쿄",              detail:"잡화몰 쇼핑",                                  cat:"쇼핑", map:"niko and TOKYO Harajuku",                   pos: [35.6700, 139.7030] },
+        { id:"d2p13", time:"19:30", name:"레드락 (Red Rock)",       detail:"하라주쿠 유명 로스트비프 덮밥",                  cat:"맛집", map:"Red Rock Harajuku Tokyo",                  pos: [35.6695, 139.7044] },
+        { id:"d2p14", time:"20:30", name:"코스메 도쿄",             detail:"화장품 & 뷰티 쇼핑",                            cat:"쇼핑", map:"Cosme Tokyo Harajuku",                      pos: [35.6698, 139.7040] },
       ]},
       { ...DAY_CFG[3], places: [
-        { time:"09:00", name:"히에 신사",              detail:"아카사카 / 신사 참배",                                cat:"관광", map:"Hie Shrine Akasaka Tokyo" },
-        { time:"10:00", name:"스기약국",               detail:"보충 쇼핑 / 마지막 기념품",                           cat:"쇼핑", map:"Sugiya Akasaka Tokyo" },
-        { time:"12:00", name:"점심 — 모슈 라멘",       detail:"도쿄 마지막 점심식사 🥺",                             cat:"맛집", map:"もつ次郎 Akasaka Tokyo" },
-        { time:"16:00", name:"공항리무진 버스 출발",   detail:"호텔 → 나리타공항 이동 (약 2시간)",                    cat:"교통", map:"Narita Airport Limousine Bus Tokyo" },
-        { time:"18:00", name:"나리타공항 도착",        detail:"수속 완료 · 면세점 & 눈물의 마지막 저녁 🥺",          cat:"맛집", map:"Narita International Airport Terminal 1" },
-        { time:"19:15", name:"나리타공항 출발 (LJ212)",detail:"귀국 · ICN 21:45 도착",                               cat:"교통", map:"Narita International Airport" },
+        { id:"d3p0", time:"09:00", name:"히에 신사",               detail:"아카사카 / 신사 참배",                          cat:"관광", map:"Hie Shrine Akasaka Tokyo",                  pos: [35.6745, 139.7390] },
+        { id:"d3p1", time:"10:00", name:"스기약국",                detail:"보충 쇼핑 / 마지막 기념품",                      cat:"쇼핑", map:"Sugiya Akasaka Tokyo",                      pos: [35.6733, 139.7365] },
+        { id:"d3p2", time:"12:00", name:"점심 — 모슈 라멘",        detail:"도쿄 마지막 점심식사 🥺",                        cat:"맛집", map:"もつ次郎 Akasaka Tokyo",                   pos: [35.6745, 139.7335] },
+        { id:"d3p3", time:"16:00", name:"공항리무진 버스 출발",    detail:"호텔 → 나리타공항 이동 (약 2시간)",               cat:"교통", map:"Narita Airport Limousine Bus Tokyo",        pos: null },
+        { id:"d3p4", time:"18:00", name:"나리타공항 도착",         detail:"수속 완료 · 면세점 & 눈물의 마지막 저녁 🥺",     cat:"맛집", map:"Narita International Airport Terminal 1",  pos: NRT_POS },
+        { id:"d3p5", time:"19:15", name:"나리타공항 출발 (LJ212)", detail:"귀국 · ICN 21:45 도착",                         cat:"교통", map:"Narita International Airport",             pos: NRT_POS },
       ]},
     ];
 
@@ -180,6 +135,10 @@
       { id:4, cat:"📱 앱 준비", items:["Google Maps 오프라인 도쿄 지도 다운","파파고 / DeepL 번역앱","롯폰기힐즈 / 시부야스카이 예약 확인","스시마도리 예약 확인","JRPASS / 교통카드 확인"] },
       { id:5, cat:"👕 의류·용품", items:["4월 도쿄 (15~22℃) 기준 옷","편한 신발 필수 (하루 1만보+)","가벼운 겉옷 (일교차 대비)","우산/우비 (4월 봄비 대비)","보조 에코백 (쇼핑용)"] },
     ];
+
+    function genId() {
+      return 'p' + Math.random().toString(36).slice(2, 8);
+    }
 
     /* ─────────────── 컴포넌트 ─────────────── */
 
@@ -194,7 +153,7 @@
     }
 
     function PlaceCard({ place, color }) {
-      const url = `https://www.google.com/maps/search/${encodeURIComponent(place.map)}`;
+      const url = `https://www.google.com/maps/search/${encodeURIComponent(place.map || place.name)}`;
       return (
         <div className="flex gap-2 sm:gap-3 group place-card">
           <div className="w-10 sm:w-12 shrink-0 text-right pt-3.5">
@@ -223,112 +182,181 @@
       );
     }
 
-    /* ── Leaflet 지도 ── */
-    function TravelMap({ show }) {
-      const mapRef  = useRef(null);
-      const mapInst = useRef(null);
+    /* ── 편집 모달 ── */
+    function EditModal({ place, dayIdx, onSave, onDelete, onClose }) {
+      const isNew = !place.id;
+      const [form, setForm] = useState({
+        time:   place.time   || '',
+        name:   place.name   || '',
+        detail: place.detail || '',
+        cat:    place.cat    || '관광',
+        map:    place.map    || '',
+      });
+
+      const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+      return (
+        <div className="modal-overlay" onClick={onClose}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-extrabold text-gray-800 text-base">
+                {isNew ? '➕ 장소 추가' : '✏️ 장소 수정'}
+                <span className="ml-2 text-xs font-medium text-gray-400">{DAY_CFG[dayIdx].day}</span>
+              </h2>
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl leading-none">✕</button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">시간</label>
+                  <input value={form.time} onChange={e => set('time', e.target.value)}
+                    placeholder="예) 14:00"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-gray-500 mb-1 block">카테고리</label>
+                  <select value={form.cat} onChange={e => set('cat', e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                    {Object.entries(CAT).map(([k, v]) => (
+                      <option key={k} value={k}>{v.icon} {k}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-500 mb-1 block">장소명</label>
+                <input value={form.name} onChange={e => set('name', e.target.value)}
+                  placeholder="장소 이름"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-500 mb-1 block">설명</label>
+                <input value={form.detail} onChange={e => set('detail', e.target.value)}
+                  placeholder="간단한 설명"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-500 mb-1 block">구글맵 검색어 <span className="text-gray-300 font-normal">(선택)</span></label>
+                <input value={form.map} onChange={e => set('map', e.target.value)}
+                  placeholder="예) Ginza Loft Tokyo"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                <p className="text-xs text-gray-400 mt-1">📍 지도 버튼 클릭 시 구글맵에서 검색되는 키워드예요</p>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-5">
+              {!isNew && (
+                <button onClick={() => onDelete(place.id)}
+                  className="flex-none px-3 py-2.5 rounded-xl text-sm font-bold bg-red-50 text-red-500 hover:bg-red-500 hover:text-white border border-red-200 transition-all">
+                  🗑️ 삭제
+                </button>
+              )}
+              <button onClick={onClose}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all">
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  if (!form.name.trim()) { alert('장소명을 입력해주세요.'); return; }
+                  onSave({ ...place, ...form, id: place.id || genId() });
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-blue-500 text-white hover:bg-blue-600 transition-all">
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ── Leaflet 지도 (동적 업데이트) ── */
+    function TravelMap({ show, travelData }) {
+      const mapRef    = useRef(null);
+      const mapInst   = useRef(null);
+      const layersRef = useRef([]);
 
       useEffect(() => {
         if (mapInst.current) return;
-
         const map = L.map(mapRef.current, { center: [35.675, 139.720], zoom: 13 });
-
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
           maxZoom: 19,
         }).addTo(map);
+        mapInst.current = map;
+      }, []);
 
-        MAP_ROUTES.forEach((route, di) => {
-          const cfg   = DAY_CFG[di];
-          const color = cfg.color;
+      useEffect(() => {
+        if (!mapInst.current) return;
 
-          // 루트 선
-          L.polyline(route.coords, {
-            color, weight: 5, opacity: 0.8,
-            dashArray: di === 0 || di === 3 ? '10,6' : null,
-            lineJoin: 'round', lineCap: 'round',
-          }).addTo(map);
+        layersRef.current.forEach(l => { try { l.remove(); } catch(e) {} });
+        layersRef.current = [];
 
-          // 마커
-          route.markers.forEach(mk => {
+        travelData.forEach((day, di) => {
+          const cfg      = DAY_CFG[di];
+          const color    = cfg.color;
+          const withPos  = day.places.filter(p => p.pos);
+          if (withPos.length === 0) return;
+
+          if (withPos.length > 1) {
+            const isDashed = di === 0 || di === 3;
+            const line = L.polyline(withPos.map(p => p.pos), {
+              color, weight: 5, opacity: 0.8,
+              dashArray: isDashed ? '10,6' : null,
+              lineJoin: 'round', lineCap: 'round',
+            }).addTo(mapInst.current);
+            layersRef.current.push(line);
+          }
+
+          withPos.forEach(place => {
+            const catIcon = CAT[place.cat]?.icon || '📍';
             const icon = L.divIcon({
               className: '',
-              html: `<div style="
-                background:${color};border-radius:50%;
-                width:30px;height:30px;
-                display:flex;align-items:center;justify-content:center;
-                font-size:13px;border:2.5px solid #fff;
-                box-shadow:0 2px 8px rgba(0,0,0,.3);">${mk.em}</div>`,
+              html: `<div style="background:${color};border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3);">${catIcon}</div>`,
               iconSize: [30, 30], iconAnchor: [15, 15],
             });
-            L.marker(mk.pos, { icon })
+            const marker = L.marker(place.pos, { icon })
               .bindPopup(`<div style="font-family:'Noto Sans KR',sans-serif;">
                 <div style="font-weight:800;color:${color};font-size:12px;margin-bottom:4px;">${cfg.day} · ${cfg.date}</div>
-                <div style="font-weight:700;font-size:14px;margin-bottom:2px;">${mk.name}</div>
-                <div style="color:#6b7280;font-size:12px;">⏰ ${mk.time}</div>
+                <div style="font-weight:700;font-size:14px;margin-bottom:2px;">${place.name}</div>
+                <div style="color:#6b7280;font-size:12px;">⏰ ${place.time}</div>
+                <div style="color:#9ca3af;font-size:11px;margin-top:2px;">${place.detail}</div>
               </div>`)
-              .addTo(map);
+              .addTo(mapInst.current);
+            layersRef.current.push(marker);
           });
         });
 
-        // 호텔 고정 마커 (항상 표시)
+        // 호텔 고정 마커
         const hotelIcon = L.divIcon({
           className: '',
-          html: `<div style="
-            background:#fff;border-radius:50%;
-            width:40px;height:40px;
-            display:flex;align-items:center;justify-content:center;
-            font-size:20px;border:3px solid #f43f5e;
-            box-shadow:0 3px 12px rgba(0,0,0,.35);
-            position:relative;">🏨
-            <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
-              background:#f43f5e;color:#fff;font-size:9px;font-weight:800;
-              border-radius:4px;padding:1px 4px;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">
-              숙소
-            </div>
-          </div>`,
+          html: `<div style="background:#fff;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid #f43f5e;box-shadow:0 3px 12px rgba(0,0,0,.35);position:relative;">🏨<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:#f43f5e;color:#fff;font-size:9px;font-weight:800;border-radius:4px;padding:1px 4px;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">숙소</div></div>`,
           iconSize: [40, 46], iconAnchor: [20, 46],
         });
-        L.marker(HOTEL_POS, { icon: hotelIcon, zIndexOffset: 1000 })
-          .bindPopup(`<div style="font-family:'Noto Sans KR',sans-serif;">
-            <div style="font-weight:800;color:#f43f5e;font-size:13px;margin-bottom:4px;">🏨 숙소 (매일 베이스캠프)</div>
-            <div style="font-weight:700;font-size:14px;margin-bottom:2px;">아카사카 어반 호텔 신관</div>
-            <div style="color:#6b7280;font-size:12px;">4/10 체크인 · 4/13 체크아웃</div>
-            <a href="https://www.google.com/maps/search/Akasaka+Urban+Hotel+Annex+Tokyo"
-              target="_blank" style="color:#3b82f6;font-size:12px;font-weight:600;">📍 Google Maps</a>
-          </div>`)
-          .addTo(map);
+        layersRef.current.push(
+          L.marker(HOTEL_POS, { icon: hotelIcon, zIndexOffset: 1000 })
+            .bindPopup(`<div style="font-family:'Noto Sans KR',sans-serif;"><div style="font-weight:800;color:#f43f5e;font-size:13px;margin-bottom:4px;">🏨 숙소 (매일 베이스캠프)</div><div style="font-weight:700;font-size:14px;margin-bottom:2px;">아카사카 어반 호텔 신관</div><div style="color:#6b7280;font-size:12px;">4/10 체크인 · 4/13 체크아웃</div></div>`)
+            .addTo(mapInst.current)
+        );
 
         // 나리타공항 고정 마커
         const nrtIcon = L.divIcon({
           className: '',
-          html: `<div style="
-            background:#fff;border-radius:50%;
-            width:36px;height:36px;
-            display:flex;align-items:center;justify-content:center;
-            font-size:18px;border:3px solid #8B5CF6;
-            box-shadow:0 3px 12px rgba(0,0,0,.3);
-            position:relative;">✈️
-            <div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);
-              background:#8B5CF6;color:#fff;font-size:9px;font-weight:800;
-              border-radius:4px;padding:1px 4px;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">
-              NRT
-            </div>
-          </div>`,
+          html: `<div style="background:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;border:3px solid #8B5CF6;box-shadow:0 3px 12px rgba(0,0,0,.3);position:relative;">✈️<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:#8B5CF6;color:#fff;font-size:9px;font-weight:800;border-radius:4px;padding:1px 4px;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">NRT</div></div>`,
           iconSize: [36, 42], iconAnchor: [18, 42],
         });
-        L.marker(NRT_POS, { icon: nrtIcon, zIndexOffset: 900 })
-          .bindPopup(`<div style="font-family:'Noto Sans KR',sans-serif;">
-            <div style="font-weight:800;color:#8B5CF6;font-size:13px;margin-bottom:4px;">✈️ 나리타국제공항 (NRT)</div>
-            <div style="font-size:12px;color:#374151;">🛬 Day1 LJ209 · 17:15 도착</div>
-            <div style="font-size:12px;color:#374151;">🛫 Day4 LJ212 · 19:15 출발</div>
-          </div>`)
-          .addTo(map);
+        layersRef.current.push(
+          L.marker(NRT_POS, { icon: nrtIcon, zIndexOffset: 900 })
+            .bindPopup(`<div style="font-family:'Noto Sans KR',sans-serif;"><div style="font-weight:800;color:#8B5CF6;font-size:13px;margin-bottom:4px;">✈️ 나리타국제공항 (NRT)</div><div style="font-size:12px;color:#374151;">🛬 Day1 LJ209 · 17:15 도착</div><div style="font-size:12px;color:#374151;">🛫 Day4 LJ212 · 19:15 출발</div></div>`)
+            .addTo(mapInst.current)
+        );
 
-        // 나리타 포함 전체 범위에 맞춤
-        map.fitBounds([[35.54, 139.55], [35.82, 140.50]], { padding: [20, 20] });
-        mapInst.current = map;
-      }, []);
+        mapInst.current.fitBounds([[35.54, 139.55], [35.82, 140.50]], { padding: [20, 20] });
+
+      }, [travelData]);
 
       useEffect(() => {
         if (show && mapInst.current) {
@@ -343,13 +371,13 @@
     }
 
     /* ── 홈 뷰 ── */
-    function HomeView({ onDay, show }) {
-      const total   = TRAVEL.reduce((s, d) => s + d.places.length, 0);
-      const counts  = Object.fromEntries(Object.keys(CAT).map(k => [k, TRAVEL.flatMap(d=>d.places).filter(p=>p.cat===k).length]));
+    function HomeView({ onDay, show, travelData }) {
+      const allPlaces = travelData.flatMap(d => d.places);
+      const total  = allPlaces.length;
+      const counts = Object.fromEntries(Object.keys(CAT).map(k => [k, allPlaces.filter(p => p.cat === k).length]));
 
       return (
         <div className="fade-in pb-24" style={{ display: show ? 'block' : 'none' }}>
-          {/* 지도 박스 */}
           <div className="bg-white border-b border-gray-100 shadow-sm overflow-hidden">
             <div className="px-4 py-3 flex items-center gap-2 border-b border-gray-100">
               <span className="text-lg">🗺️</span>
@@ -358,8 +386,7 @@
                 <p className="text-xs text-gray-400">대중교통 기준 최단 경로 시각화</p>
               </div>
             </div>
-            <TravelMap show={show} />
-            {/* 범례 */}
+            <TravelMap show={show} travelData={travelData} />
             <div className="px-4 py-3 flex flex-wrap gap-x-4 gap-y-1.5">
               {DAY_CFG.map(d => (
                 <div key={d.idx} className="flex items-center gap-1.5">
@@ -370,12 +397,11 @@
                   <span className="text-xs text-gray-600 font-medium">{d.emoji} {d.day} {d.date}({d.week})</span>
                 </div>
               ))}
-              <p className="w-full text-xs text-gray-400 mt-0.5">* 🏨 = 아카사카 어반 호텔 (매일 베이스캠프) · ✈️ = 나리타공항 · 점선 = 리무진버스 구간</p>
+              <p className="w-full text-xs text-gray-400 mt-0.5">* 🏨 = 아카사카 어반 호텔 · ✈️ = 나리타공항 · 점선 = 리무진버스 구간</p>
             </div>
           </div>
 
           <div className="px-4 pt-4 max-w-2xl mx-auto lg:grid lg:grid-cols-2 lg:gap-4">
-            {/* 통계 */}
             <div className="col-span-2 grid grid-cols-4 gap-2 mb-4">
               {[
                 { label:"총 장소", v:total,       icon:"📍", cls:"text-violet-600" },
@@ -391,7 +417,6 @@
               ))}
             </div>
 
-            {/* 항공편 */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4">
               <h3 className="text-sm font-bold text-gray-700 mb-3">✈️ 항공편</h3>
               <div className="space-y-2">
@@ -414,7 +439,6 @@
               </div>
             </div>
 
-            {/* 숙소 */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4">
               <h3 className="text-sm font-bold text-gray-700 mb-3">🏨 숙소</h3>
               <div className="flex items-center gap-3 p-2.5 bg-sky-50 rounded-lg border border-sky-100">
@@ -430,11 +454,10 @@
               </div>
             </div>
 
-            {/* 일정 개요 카드 */}
             <div className="col-span-2 mb-4">
               <h3 className="text-sm font-bold text-gray-700 mb-2">📅 일정 개요</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {TRAVEL.map((d, i) => (
+                {travelData.map((d, i) => (
                   <button key={i} onClick={() => onDay(`d${i}`)}
                     className={`bg-gradient-to-br ${d.grad} text-white rounded-xl p-3.5 text-left hover:scale-105 transition-transform shadow-sm active:scale-95`}>
                     <div className="text-2xl mb-1.5">{d.emoji}</div>
@@ -449,7 +472,6 @@
               </div>
             </div>
 
-            {/* 카테고리 범례 */}
             <div className="col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4">
               <h3 className="text-sm font-bold text-gray-700 mb-2">🏷️ 카테고리</h3>
               <div className="flex flex-wrap gap-2">
@@ -466,8 +488,8 @@
     }
 
     /* ── 일별 뷰 ── */
-    function DayView({ idx }) {
-      const d = TRAVEL[idx];
+    function DayView({ idx, travelData }) {
+      const d = travelData[idx];
       return (
         <div className="fade-in pb-24 pt-4 px-4">
           <div className="max-w-xl mx-auto">
@@ -483,7 +505,7 @@
             </div>
             <div>
               {d.places.map((p, i) => (
-                <PlaceCard key={i} place={p} color={d.color} />
+                <PlaceCard key={p.id || i} place={p} color={d.color} />
               ))}
             </div>
           </div>
@@ -491,10 +513,106 @@
       );
     }
 
+    /* ── 편집 뷰 ── */
+    function EditView({ travelData, onSavePlace, onDeletePlace, onAddPlace, onReset }) {
+      const [modal, setModal] = useState(null);
+
+      return (
+        <div className="fade-in pb-24 pt-4 px-4">
+          <div className="max-w-xl mx-auto">
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-xs text-amber-700 font-medium">
+              ✏️ 장소를 수정·추가·삭제하면 홈 화면의 지도 루트가 자동으로 업데이트됩니다. 변경사항은 브라우저에 저장돼요.
+            </div>
+
+            {travelData.map((day, di) => (
+              <div key={di} className="mb-6">
+                <div className={`bg-gradient-to-r ${day.grad} text-white rounded-2xl p-3 mb-3 shadow-sm`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{day.emoji}</span>
+                      <div>
+                        <div className="font-extrabold text-sm">{day.day} · {day.date} ({day.week})</div>
+                        <div className="text-white/70 text-xs">{day.theme}</div>
+                      </div>
+                    </div>
+                    <span className="text-xs bg-white/25 rounded-full px-2.5 py-1 font-bold">{day.places.length}곳</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {day.places.map((place, pi) => (
+                    <div key={place.id || pi}
+                      className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-gray-400 font-medium shrink-0">{place.time}</span>
+                          <span className="font-bold text-gray-800 text-sm truncate">{place.name}</span>
+                          <CatBadge cat={place.cat} />
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">{place.detail}</p>
+                      </div>
+                      <button onClick={() => setModal({ place, dayIdx: di })}
+                        className="shrink-0 text-xs font-bold bg-gray-50 hover:bg-gray-700 hover:text-white text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200 transition-all">
+                        수정
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    onClick={() => setModal({ place: { time:'', name:'', detail:'', cat:'관광', map:'', pos: null }, dayIdx: di })}
+                    className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm font-bold text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-all">
+                    + 장소 추가
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            <div className="mt-2 pt-4 border-t border-gray-100">
+              <button onClick={() => {
+                if (confirm('모든 변경사항을 초기화할까요?')) onReset();
+              }}
+                className="w-full py-2.5 rounded-xl text-sm font-bold text-red-400 hover:text-red-600 hover:bg-red-50 border border-red-100 transition-all">
+                🔄 초기 데이터로 되돌리기
+              </button>
+            </div>
+          </div>
+
+          {modal && (
+            <EditModal
+              place={modal.place}
+              dayIdx={modal.dayIdx}
+              onSave={(updated) => {
+                if (!modal.place.id) {
+                  onAddPlace(modal.dayIdx, updated);
+                } else {
+                  onSavePlace(modal.dayIdx, updated);
+                }
+                setModal(null);
+              }}
+              onDelete={(id) => {
+                onDeletePlace(modal.dayIdx, id);
+                setModal(null);
+              }}
+              onClose={() => setModal(null)}
+            />
+          )}
+        </div>
+      );
+    }
+
     /* ── 체크리스트 뷰 ── */
     function ChecklistView() {
-      const [ck, setCk] = useState({});
-      const toggle = k => setCk(p => ({ ...p, [k]: !p[k] }));
+      const [ck, setCk] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('tokyogogo-checklist') || '{}'); } catch { return {}; }
+      });
+
+      const toggle = k => setCk(p => {
+        const next = { ...p, [k]: !p[k] };
+        localStorage.setItem('tokyogogo-checklist', JSON.stringify(next));
+        return next;
+      });
+
       const total = CHECKLIST.reduce((s, c) => s + c.items.length, 0);
       const done  = Object.values(ck).filter(Boolean).length;
       const pct   = Math.round((done / total) * 100);
@@ -502,7 +620,6 @@
       return (
         <div className="fade-in pb-24 pt-4 px-4">
           <div className="max-w-xl mx-auto">
-            {/* 진행률 */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-bold text-gray-700 text-sm">여행 준비 현황</span>
@@ -559,14 +676,52 @@
       { id:'d2',        icon:'🌸', label:'Day3' },
       { id:'d3',        icon:'🏠', label:'Day4' },
       { id:'checklist', icon:'✅', label:'준비물' },
+      { id:'edit',      icon:'✏️', label:'편집' },
     ];
 
     function App() {
       const [tab, setTab] = useState('home');
 
+      const [travelData, setTravelData] = useState(() => {
+        try {
+          const saved = localStorage.getItem('tokyogogo-travel');
+          return saved ? JSON.parse(saved) : TRAVEL_INITIAL;
+        } catch { return TRAVEL_INITIAL; }
+      });
+
+      const saveTravel = useCallback((data) => {
+        setTravelData(data);
+        localStorage.setItem('tokyogogo-travel', JSON.stringify(data));
+      }, []);
+
+      const handleSavePlace = (dayIdx, updated) => {
+        const next = travelData.map((day, di) =>
+          di !== dayIdx ? day : { ...day, places: day.places.map(p => p.id === updated.id ? updated : p) }
+        );
+        saveTravel(next);
+      };
+
+      const handleDeletePlace = (dayIdx, id) => {
+        const next = travelData.map((day, di) =>
+          di !== dayIdx ? day : { ...day, places: day.places.filter(p => p.id !== id) }
+        );
+        saveTravel(next);
+      };
+
+      const handleAddPlace = (dayIdx, newPlace) => {
+        const next = travelData.map((day, di) =>
+          di !== dayIdx ? day : { ...day, places: [...day.places, newPlace] }
+        );
+        saveTravel(next);
+      };
+
+      const handleReset = () => {
+        localStorage.removeItem('tokyogogo-travel');
+        setTravelData(TRAVEL_INITIAL);
+      };
+
       return (
         <div className="min-h-screen bg-slate-50">
-          {/* ── 헤더 ── */}
           <header className="bg-gradient-to-r from-rose-500 via-pink-500 to-orange-400 text-white shadow-xl sticky top-0 z-50">
             <div className="max-w-3xl mx-auto px-4 pt-safe">
               <div className="flex items-center gap-3 py-3 border-b border-white/20">
@@ -579,11 +734,10 @@
                   <div className="text-xs bg-white/20 rounded-full px-2.5 py-1 font-bold">🏨 아카사카</div>
                 </div>
               </div>
-              {/* 탭 */}
               <div className="flex gap-0.5 py-2 overflow-x-auto scrollbar-hide">
                 {TABS.map(t => (
                   <button key={t.id} onClick={() => setTab(t.id)}
-                    className={`tab-btn flex-1 min-w-[50px] flex flex-col items-center py-1.5 px-1 rounded-lg text-xs font-bold
+                    className={`tab-btn flex-1 min-w-[44px] flex flex-col items-center py-1.5 px-1 rounded-lg text-xs font-bold
                       ${tab === t.id ? 'bg-white/30 text-white shadow-sm scale-105' : 'text-white/60 hover:bg-white/15 hover:text-white'}`}>
                     <span className="text-sm">{t.icon}</span>
                     <span className="mt-0.5 text-xs">{t.label}</span>
@@ -593,16 +747,22 @@
             </div>
           </header>
 
-          {/* ── 컨텐츠 ── */}
           <main className="max-w-3xl mx-auto">
-            {/* 홈은 항상 렌더링 (지도 유지) */}
-            <HomeView onDay={setTab} show={tab === 'home'} />
-
-            {tab === 'd0' && <DayView idx={0} />}
-            {tab === 'd1' && <DayView idx={1} />}
-            {tab === 'd2' && <DayView idx={2} />}
-            {tab === 'd3' && <DayView idx={3} />}
+            <HomeView onDay={setTab} show={tab === 'home'} travelData={travelData} />
+            {tab === 'd0' && <DayView idx={0} travelData={travelData} />}
+            {tab === 'd1' && <DayView idx={1} travelData={travelData} />}
+            {tab === 'd2' && <DayView idx={2} travelData={travelData} />}
+            {tab === 'd3' && <DayView idx={3} travelData={travelData} />}
             {tab === 'checklist' && <ChecklistView />}
+            {tab === 'edit' && (
+              <EditView
+                travelData={travelData}
+                onSavePlace={handleSavePlace}
+                onDeletePlace={handleDeletePlace}
+                onAddPlace={handleAddPlace}
+                onReset={handleReset}
+              />
+            )}
           </main>
         </div>
       );

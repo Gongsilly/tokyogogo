@@ -661,11 +661,38 @@
 
     /* ── 체크리스트 뷰 ── */
     const PEOPLE = [
-      { key:'쭈녕',  emoji:'🧡', color:'violet', grad:'from-violet-500 to-purple-600', ring:'ring-violet-400', active:'bg-violet-500 border-violet-500', hover:'group-hover:border-violet-400' },
-      { key:'현지콩', emoji:'💚', color:'pink',   grad:'from-pink-500 to-rose-500',    ring:'ring-pink-400',   active:'bg-pink-500 border-pink-500',   hover:'group-hover:border-pink-400'   },
+      { key:'쭈녕',  emoji:'🧡', color:'violet', grad:'from-violet-500 to-purple-600', active:'bg-violet-500 border-violet-500', hover:'group-hover:border-violet-400' },
+      { key:'현지콩', emoji:'💚', color:'pink',   grad:'from-pink-500 to-rose-500',    active:'bg-pink-500 border-pink-500',   hover:'group-hover:border-pink-400'   },
     ];
 
+    const CL_KEY = 'tokyogogo-checklist-data';
+
+    function autoEmoji(name) {
+      const n = name;
+      if (/서류|여권|비자|보험|문서|확인서/.test(n)) return '📄';
+      if (/금융|카드|현금|환전|suica|pasmo|ic카드|페이/.test(n)) return '💳';
+      if (/전자|충전|배터리|카메라|어댑터|케이블|이어폰/.test(n)) return '🔌';
+      if (/앱|어플|지도|번역|예약|다운/.test(n)) return '📱';
+      if (/옷|의류|신발|가방|우산|겉옷|짐|에코백/.test(n)) return '👕';
+      if (/약|의약|건강|상비|반창고/.test(n)) return '💊';
+      if (/화장|뷰티|스킨|코스메|선크림/.test(n)) return '💄';
+      if (/간식|음식|먹을|식품/.test(n)) return '🍱';
+      if (/선물|기념품|쇼핑/.test(n)) return '🎁';
+      if (/사진|카메라|포토/.test(n)) return '📷';
+      if (/숙소|호텔|예약/.test(n)) return '🏨';
+      if (/교통|버스|지하철|기차|비행/.test(n)) return '🚌';
+      if (/세면|위생|샴푸|치약/.test(n)) return '🧴';
+      return '📝';
+    }
+
     function ChecklistView() {
+      const [clData, setClData] = useState(() => {
+        try {
+          const saved = localStorage.getItem(CL_KEY);
+          return saved ? JSON.parse(saved) : CHECKLIST;
+        } catch { return CHECKLIST; }
+      });
+
       const [ck, setCk] = useState(() => {
         const init = {};
         PEOPLE.forEach(p => {
@@ -675,77 +702,198 @@
         return init;
       });
 
+      const [editMode,    setEditMode]    = useState(false);
+      const [newCatName,  setNewCatName]  = useState('');
+      const [addingTo,    setAddingTo]    = useState(null); // cat id
+      const [newItemText, setNewItemText] = useState('');
+
+      const saveCl = (data) => {
+        setClData(data);
+        localStorage.setItem(CL_KEY, JSON.stringify(data));
+      };
+
       const toggle = (person, k) => setCk(prev => {
         const next = { ...prev, [person]: { ...prev[person], [k]: !prev[person][k] } };
         localStorage.setItem(`tokyogogo-ck-${person}`, JSON.stringify(next[person]));
         return next;
       });
 
-      const total = CHECKLIST.reduce((s, c) => s + c.items.length, 0);
+      const addCat = () => {
+        const name = newCatName.trim();
+        if (!name) return;
+        const emoji = autoEmoji(name);
+        saveCl([...clData, { id: Date.now(), cat: `${emoji} ${name}`, items: [] }]);
+        setNewCatName('');
+      };
+
+      const delCat = (id) => saveCl(clData.filter(c => c.id !== id));
+
+      const addItem = (catId) => {
+        const text = newItemText.trim();
+        if (!text) return;
+        saveCl(clData.map(c => c.id === catId ? { ...c, items: [...c.items, text] } : c));
+        setNewItemText('');
+        setAddingTo(null);
+      };
+
+      const delItem = (catId, idx) =>
+        saveCl(clData.map(c => c.id === catId ? { ...c, items: c.items.filter((_, i) => i !== idx) } : c));
+
+      const total = clData.reduce((s, c) => s + c.items.length, 0);
 
       return (
         <div className="fade-in pb-24 pt-4 px-3">
           <div className="max-w-2xl mx-auto">
 
-            {/* 두 사람 진행률 */}
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {PEOPLE.map(p => {
-                const done = Object.values(ck[p.key] || {}).filter(Boolean).length;
-                const pct  = Math.round((done / total) * 100);
-                return (
-                  <div key={p.key} className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-extrabold text-gray-700 text-sm">{p.emoji} {p.key}</span>
-                      <span className={`font-extrabold text-sm text-${p.color}-600`}>{pct}%</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div className={`bg-gradient-to-r ${p.grad} h-2 rounded-full transition-all duration-500`}
-                        style={{ width: `${pct}%` }} />
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1">{done}/{total} 완료</div>
-                    {done === total && (
-                      <div className={`text-xs font-bold text-${p.color}-600 mt-1 animate-bounce`}>🎉 준비 완료!</div>
-                    )}
-                  </div>
-                );
-              })}
+            {/* 상단 툴바 */}
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-gray-400">
+                {editMode ? '카테고리·항목을 자유롭게 편집하세요' : '각자 체크하며 준비해요 ✈️'}
+              </p>
+              <button onClick={() => setEditMode(v => !v)}
+                className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-all
+                  ${editMode ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-500 border-gray-200 hover:border-blue-300'}`}>
+                {editMode ? '✅ 완료' : '✏️ 편집'}
+              </button>
             </div>
 
-            {/* 카테고리별 체크리스트 — 두 컬럼 나란히 */}
-            {CHECKLIST.map(c => (
-              <div key={c.id} className="mb-3">
-                <h3 className="font-bold text-gray-600 text-xs mb-1.5 px-1">{c.cat}</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {PEOPLE.map(p => (
-                    <div key={p.key} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                      {/* 컬럼 헤더 */}
-                      <div className={`bg-gradient-to-r ${p.grad} text-white text-xs font-extrabold px-3 py-1.5 text-center`}>
-                        {p.emoji} {p.key}
+            {/* 진행률 (일반 모드만) */}
+            {!editMode && (
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {PEOPLE.map(p => {
+                  const done = Object.values(ck[p.key] || {}).filter(Boolean).length;
+                  const pct  = total > 0 ? Math.round((done / total) * 100) : 0;
+                  return (
+                    <div key={p.key} className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="font-extrabold text-gray-700 text-sm">{p.emoji} {p.key}</span>
+                        <span className={`font-extrabold text-sm text-${p.color}-600`}>{pct}%</span>
                       </div>
-                      {/* 항목들 */}
-                      <div className="p-2 space-y-1.5">
-                        {c.items.map((item, i) => {
-                          const k   = `${c.id}-${i}`;
-                          const on  = !!(ck[p.key] || {})[k];
-                          return (
-                            <label key={i} className="flex items-start gap-1.5 cursor-pointer group">
-                              <button onClick={() => toggle(p.key, k)}
-                                className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all
-                                  ${on ? p.active : `border-gray-300 ${p.hover}`}`}>
-                                {on && <span className="text-white font-extrabold" style={{fontSize:'9px'}}>✓</span>}
-                              </button>
-                              <span className={`text-xs leading-snug transition-all ${on ? 'text-gray-300 line-through' : 'text-gray-600'}`}>
-                                {item}
-                              </span>
-                            </label>
-                          );
-                        })}
+                      <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div className={`bg-gradient-to-r ${p.grad} h-2 rounded-full transition-all duration-500`}
+                          style={{ width: `${pct}%` }} />
                       </div>
+                      <div className="text-xs text-gray-400 mt-1">{done}/{total} 완료</div>
+                      {done === total && total > 0 && (
+                        <div className={`text-xs font-bold text-${p.color}-600 mt-1 animate-bounce`}>🎉 준비 완료!</div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 카테고리 목록 */}
+            {clData.map(c => (
+              <div key={c.id} className="mb-3">
+                {editMode ? (
+                  /* ── 편집 모드 카드 ── */
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-100">
+                      <span className="font-bold text-gray-700 text-sm">{c.cat}</span>
+                      <button onClick={() => { if (confirm(`'${c.cat}' 카테고리를 삭제할까요?`)) delCat(c.id); }}
+                        className="text-xs text-red-400 hover:text-red-600 font-bold px-2 py-0.5 rounded hover:bg-red-50 transition-all">
+                        🗑️ 삭제
+                      </button>
+                    </div>
+                    <div className="p-2 space-y-1">
+                      {c.items.map((item, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="flex-1 text-sm text-gray-700 py-0.5">{item}</span>
+                          <button onClick={() => delItem(c.id, i)}
+                            className="shrink-0 w-5 h-5 flex items-center justify-center text-red-300 hover:text-red-500 hover:bg-red-50 rounded transition-all text-xs">
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      {c.items.length === 0 && (
+                        <p className="text-xs text-gray-300 text-center py-1">항목 없음</p>
+                      )}
+                      {/* 항목 추가 인풋 */}
+                      {addingTo === c.id ? (
+                        <div className="flex gap-1.5 mt-1.5">
+                          <input autoFocus value={newItemText} onChange={e => setNewItemText(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') addItem(c.id); if (e.key === 'Escape') { setAddingTo(null); setNewItemText(''); } }}
+                            placeholder="항목 입력 후 Enter"
+                            className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                          <button onClick={() => addItem(c.id)}
+                            className="text-xs font-bold bg-blue-500 text-white px-2.5 py-1.5 rounded-lg">추가</button>
+                          <button onClick={() => { setAddingTo(null); setNewItemText(''); }}
+                            className="text-xs text-gray-400 px-1.5">✕</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setAddingTo(c.id); setNewItemText(''); }}
+                          className="w-full text-xs text-blue-400 hover:text-blue-600 py-1.5 border border-dashed border-blue-200 rounded-lg hover:border-blue-400 transition-all mt-1">
+                          + 항목 추가
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* ── 일반 모드 (두 컬럼) ── */
+                  <>
+                    <h3 className="font-bold text-gray-600 text-xs mb-1.5 px-1">{c.cat}</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PEOPLE.map(p => (
+                        <div key={p.key} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                          <div className={`bg-gradient-to-r ${p.grad} text-white text-xs font-extrabold px-3 py-1.5 text-center`}>
+                            {p.emoji} {p.key}
+                          </div>
+                          <div className="p-2 space-y-1.5">
+                            {c.items.map((item, i) => {
+                              const k  = `${c.id}-${i}`;
+                              const on = !!(ck[p.key] || {})[k];
+                              return (
+                                <label key={i} className="flex items-start gap-1.5 cursor-pointer group">
+                                  <button onClick={() => toggle(p.key, k)}
+                                    className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all
+                                      ${on ? p.active : `border-gray-300 ${p.hover}`}`}>
+                                    {on && <span className="text-white font-extrabold" style={{fontSize:'9px'}}>✓</span>}
+                                  </button>
+                                  <span className={`text-xs leading-snug transition-all ${on ? 'text-gray-300 line-through' : 'text-gray-600'}`}>
+                                    {item}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                            {c.items.length === 0 && <p className="text-xs text-gray-300 text-center py-1">항목 없음</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             ))}
+
+            {/* 카테고리 추가 (편집 모드) */}
+            {editMode && (
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 mb-3">
+                <p className="text-xs font-bold text-gray-500 mb-2">➕ 새 카테고리 추가</p>
+                <div className="flex gap-2">
+                  <input value={newCatName} onChange={e => setNewCatName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') addCat(); }}
+                    placeholder="이름 입력 (이모티콘 자동 추가)"
+                    className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                  <button onClick={addCat}
+                    className="text-xs font-bold bg-blue-500 text-white px-3 py-2 rounded-lg whitespace-nowrap">추가</button>
+                </div>
+                {newCatName.trim() && (
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    미리보기: <span className="font-bold text-gray-700">{autoEmoji(newCatName)} {newCatName}</span>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* 초기화 (편집 모드) */}
+            {editMode && (
+              <button onClick={() => { if (confirm('준비물 목록을 초기화할까요?')) { localStorage.removeItem(CL_KEY); setClData(CHECKLIST); } }}
+                className="w-full py-2.5 rounded-xl text-sm font-bold text-red-400 hover:text-red-600 hover:bg-red-50 border border-red-100 transition-all">
+                🔄 초기 목록으로 되돌리기
+              </button>
+            )}
+
           </div>
         </div>
       );

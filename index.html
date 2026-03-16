@@ -277,21 +277,23 @@
     }
 
     /* ── Leaflet 지도 (동적 업데이트) ── */
-    function TravelMap({ show, travelData }) {
-      const mapRef        = useRef(null);
-      const mapInst       = useRef(null);
-      const layersRef     = useRef([]);
-      const travelDataRef = useRef(travelData);
-      const pendingUpdate = useRef(false);
+    function TravelMap({ show, travelData, visibleDays }) {
+      const mapRef         = useRef(null);
+      const mapInst        = useRef(null);
+      const layersRef      = useRef([]);
+      const travelDataRef  = useRef(travelData);
+      const visibleDaysRef = useRef(visibleDays);
+      const pendingUpdate  = useRef(false);
 
-      // travelData를 항상 최신으로 유지
-      travelDataRef.current = travelData;
+      travelDataRef.current  = travelData;
+      visibleDaysRef.current = visibleDays;
 
       const applyLayers = useCallback((map) => {
         layersRef.current.forEach(l => { try { l.remove(); } catch(e) {} });
         layersRef.current = [];
 
         travelDataRef.current.forEach((day, di) => {
+          if (!visibleDaysRef.current[di]) return; // 필터링
           const cfg     = DAY_CFG[di];
           const color   = cfg.color;
           const withPos = day.places.filter(p => p.pos && Array.isArray(p.pos) && p.pos.length === 2);
@@ -366,16 +368,15 @@
         applyLayers(map);
       }, []);
 
-      // travelData 변경 시 레이어 업데이트
+      // travelData 또는 visibleDays 변경 시 레이어 업데이트
       useEffect(() => {
         if (!mapInst.current) return;
         if (!show) {
-          // 숨겨진 상태에서 변경되면 홈으로 돌아올 때 적용하도록 표시
           pendingUpdate.current = true;
           return;
         }
         applyLayers(mapInst.current);
-      }, [travelData]);
+      }, [travelData, visibleDays]);
 
       // 홈탭 진입 시: invalidateSize + 대기 중인 업데이트 처리
       useEffect(() => {
@@ -402,32 +403,59 @@
 
     /* ── 홈 뷰 ── */
     function HomeView({ onDay, show, travelData }) {
+      const [visibleDays, setVisibleDays] = useState([true, true, true, true]);
       const allPlaces = travelData.flatMap(d => d.places);
       const total  = allPlaces.length;
       const counts = Object.fromEntries(Object.keys(CAT).map(k => [k, allPlaces.filter(p => p.cat === k).length]));
+
+      const toggleDay = (i) => setVisibleDays(v => v.map((x, idx) => idx === i ? !x : x));
+      const allOn  = visibleDays.every(Boolean);
+      const allOff = visibleDays.every(v => !v);
 
       return (
         <div className="fade-in pb-24" style={{ display: show ? 'block' : 'none' }}>
           <div className="bg-white border-b border-gray-100 shadow-sm overflow-hidden">
             <div className="px-4 py-3 flex items-center gap-2 border-b border-gray-100">
               <span className="text-lg">🗺️</span>
-              <div>
+              <div className="flex-1">
                 <p className="font-bold text-gray-800 text-sm leading-tight">전체 여행 루트</p>
-                <p className="text-xs text-gray-400">대중교통 기준 최단 경로 시각화</p>
+                <p className="text-xs text-gray-400">원하는 날짜만 선택해서 볼 수 있어요</p>
               </div>
+              <button
+                onClick={() => setVisibleDays(allOn ? [false,false,false,false] : [true,true,true,true])}
+                className="text-xs font-bold px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all shrink-0">
+                {allOn ? '전체 해제' : '전체 선택'}
+              </button>
             </div>
-            <TravelMap show={show} travelData={travelData} />
-            <div className="px-4 py-3 flex flex-wrap gap-x-4 gap-y-1.5">
-              {DAY_CFG.map(d => (
+
+            {/* Day 필터 토글 버튼 */}
+            <div className="px-4 py-2.5 flex gap-2 border-b border-gray-50">
+              {DAY_CFG.map((d, i) => {
+                const on = visibleDays[i];
+                return (
+                  <button key={i} onClick={() => toggleDay(i)}
+                    className="flex-1 flex flex-col items-center py-1.5 px-1 rounded-xl border-2 transition-all text-xs font-bold"
+                    style={on
+                      ? { background: d.color, borderColor: d.color, color: '#fff' }
+                      : { background: '#f9fafb', borderColor: '#e5e7eb', color: '#9ca3af' }}>
+                    <span>{d.emoji}</span>
+                    <span className="mt-0.5">{d.day}</span>
+                    <span style={{ fontSize: '10px', opacity: 0.8 }}>{d.date}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <TravelMap show={show} travelData={travelData} visibleDays={visibleDays} />
+
+            <div className="px-4 py-2.5 flex flex-wrap gap-x-3 gap-y-1">
+              {DAY_CFG.map((d, i) => visibleDays[i] && (
                 <div key={d.idx} className="flex items-center gap-1.5">
-                  <div className="flex items-center gap-0.5">
-                    <div className="w-6 h-1.5 rounded-full" style={{ background: d.color }} />
-                    <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
-                  </div>
-                  <span className="text-xs text-gray-600 font-medium">{d.emoji} {d.day} {d.date}({d.week})</span>
+                  <div className="w-5 h-1.5 rounded-full" style={{ background: d.color }} />
+                  <span className="text-xs text-gray-500 font-medium">{d.day} {d.date}({d.week}) {d.theme}</span>
                 </div>
               ))}
-              <p className="w-full text-xs text-gray-400 mt-0.5">* 🏨 = 아카사카 어반 호텔 · ✈️ = 나리타공항 · 점선 = 리무진버스 구간</p>
+              <p className="w-full text-xs text-gray-400 mt-0.5">🏨 아카사카 호텔 · ✈️ 나리타공항 · 점선 = 리무진버스</p>
             </div>
           </div>
 

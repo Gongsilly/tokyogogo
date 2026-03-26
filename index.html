@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>🗼 TokyoGoGo — 햄삐햄삐 도쿄여행</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>window.initGoogleMaps = () => { window.__gmapsLoaded = true; window.dispatchEvent(new Event('google-maps-ready')); };</script>
+  <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCwyu_2V68PD2ueO0P5FcOTJPAxdtgOjv4&callback=initGoogleMaps"></script>
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -14,11 +14,9 @@
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap');
     * { box-sizing: border-box; }
     body { font-family: 'Noto Sans KR', sans-serif; margin: 0; background: #f8fafc; }
-    #leaflet-map { height: 400px; z-index: 0; }
-    @media (max-width: 640px) { #leaflet-map { height: 260px; } }
-    @media (min-width: 1024px) { #leaflet-map { height: 500px; } }
-    .leaflet-popup-content-wrapper { border-radius: 12px !important; box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important; }
-    .leaflet-popup-content { margin: 12px 14px !important; }
+    #google-map { height: 400px; z-index: 0; }
+    @media (max-width: 640px) { #google-map { height: 260px; } }
+    @media (min-width: 1024px) { #google-map { height: 500px; } }
     .scrollbar-hide::-webkit-scrollbar { display: none; }
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     .timeline-dot { transition: transform 0.15s; }
@@ -277,96 +275,155 @@
     }
 
     /* ── Leaflet 지도 (동적 업데이트) ── */
+    /* ── Google Maps 지도 ── */
     function TravelMap({ show, travelData, visibleDays }) {
       const mapRef         = useRef(null);
       const mapInst        = useRef(null);
-      const layersRef      = useRef([]);
+      const overlaysRef    = useRef([]);   // Polyline + Marker 목록
+      const infoWindowRef  = useRef(null);
       const travelDataRef  = useRef(travelData);
       const visibleDaysRef = useRef(visibleDays);
       const pendingUpdate  = useRef(false);
+      const [mapsReady, setMapsReady] = useState(!!window.google);
 
       travelDataRef.current  = travelData;
       visibleDaysRef.current = visibleDays;
 
+      // Google Maps API 로드 대기
+      useEffect(() => {
+        if (window.google) return;
+        const handler = () => setMapsReady(true);
+        window.addEventListener('google-maps-ready', handler);
+        return () => window.removeEventListener('google-maps-ready', handler);
+      }, []);
+
+      const makeSvgUrl = (emoji, bgColor, size, strokeColor) => {
+        const s = size;
+        return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">
+            <circle cx="${s/2}" cy="${s/2}" r="${s/2-1}" fill="${bgColor}" stroke="${strokeColor||'white'}" stroke-width="2.5"/>
+            <text x="${s/2}" y="${s/2+4}" text-anchor="middle" font-size="${s*0.45}">${emoji}</text>
+          </svg>`
+        )}`;
+      };
+
       const applyLayers = useCallback((map) => {
-        layersRef.current.forEach(l => { try { l.remove(); } catch(e) {} });
-        layersRef.current = [];
+        // 기존 오버레이 제거
+        overlaysRef.current.forEach(o => o.setMap(null));
+        overlaysRef.current = [];
+        if (infoWindowRef.current) infoWindowRef.current.close();
+        const infoWindow = infoWindowRef.current || (infoWindowRef.current = new google.maps.InfoWindow());
 
         travelDataRef.current.forEach((day, di) => {
-          if (!visibleDaysRef.current[di]) return; // 필터링
+          if (!visibleDaysRef.current[di]) return;
           const cfg     = DAY_CFG[di];
           const color   = cfg.color;
           const withPos = day.places.filter(p => p.pos && Array.isArray(p.pos) && p.pos.length === 2);
           if (withPos.length === 0) return;
 
+          // 루트 선
           if (withPos.length > 1) {
             const isDashed = di === 0 || di === 3;
-            const line = L.polyline(withPos.map(p => p.pos), {
-              color, weight: 5, opacity: 0.8,
-              dashArray: isDashed ? '10,6' : null,
-              lineJoin: 'round', lineCap: 'round',
-            }).addTo(map);
-            layersRef.current.push(line);
+            const polyline = new google.maps.Polyline({
+              path: withPos.map(p => ({ lat: p.pos[0], lng: p.pos[1] })),
+              geodesic: false,
+              strokeColor: color,
+              strokeOpacity: isDashed ? 0 : 0.8,
+              strokeWeight: 5,
+              icons: isDashed ? [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 4 }, offset: '0', repeat: '16px' }] : [],
+              map,
+            });
+            overlaysRef.current.push(polyline);
           }
 
+          // 장소 마커
           withPos.forEach(place => {
             const catIcon = CAT[place.cat]?.icon || '📍';
-            const icon = L.divIcon({
-              className: '',
-              html: `<div style="background:${color};border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:13px;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3);">${catIcon}</div>`,
-              iconSize: [30, 30], iconAnchor: [15, 15],
+            const marker = new google.maps.Marker({
+              position: { lat: place.pos[0], lng: place.pos[1] },
+              map,
+              icon: { url: makeSvgUrl(catIcon, color, 30, '#fff'), scaledSize: new google.maps.Size(30, 30), anchor: new google.maps.Point(15, 15) },
             });
-            layersRef.current.push(
-              L.marker(place.pos, { icon })
-                .bindPopup(`<div style="font-family:'Noto Sans KR',sans-serif;">
-                  <div style="font-weight:800;color:${color};font-size:12px;margin-bottom:4px;">${cfg.day} · ${cfg.date}</div>
-                  <div style="font-weight:700;font-size:14px;margin-bottom:2px;">${place.name}</div>
-                  <div style="color:#6b7280;font-size:12px;">⏰ ${place.time}</div>
-                  <div style="color:#9ca3af;font-size:11px;margin-top:2px;">${place.detail}</div>
-                </div>`)
-                .addTo(map)
-            );
+            marker.addListener('click', () => {
+              infoWindow.setContent(`<div style="font-family:'Noto Sans KR',sans-serif;min-width:140px;">
+                <div style="font-weight:800;color:${color};font-size:12px;margin-bottom:4px;">${cfg.day} · ${cfg.date}</div>
+                <div style="font-weight:700;font-size:14px;margin-bottom:2px;">${place.name}</div>
+                <div style="color:#6b7280;font-size:12px;">⏰ ${place.time}</div>
+                <div style="color:#9ca3af;font-size:11px;margin-top:2px;">${place.detail}</div>
+              </div>`);
+              infoWindow.open(map, marker);
+            });
+            overlaysRef.current.push(marker);
           });
         });
 
         // 호텔 고정 마커
-        const hotelIcon = L.divIcon({
-          className: '',
-          html: `<div style="background:#fff;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid #f43f5e;box-shadow:0 3px 12px rgba(0,0,0,.35);position:relative;">🏨<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:#f43f5e;color:#fff;font-size:9px;font-weight:800;border-radius:4px;padding:1px 4px;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">숙소</div></div>`,
-          iconSize: [40, 46], iconAnchor: [20, 46],
+        const hotelSvg = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="46" viewBox="0 0 40 46">
+            <circle cx="20" cy="20" r="18" fill="white" stroke="#f43f5e" stroke-width="3"/>
+            <text x="20" y="27" text-anchor="middle" font-size="18">🏨</text>
+            <rect x="3" y="36" width="34" height="10" rx="4" fill="#f43f5e"/>
+            <text x="20" y="44" text-anchor="middle" font-size="9" fill="white" font-weight="bold" font-family="sans-serif">숙소</text>
+          </svg>`
+        )}`;
+        const hotelMarker = new google.maps.Marker({
+          position: { lat: HOTEL_POS[0], lng: HOTEL_POS[1] },
+          map, zIndex: 1000,
+          icon: { url: hotelSvg, scaledSize: new google.maps.Size(40, 46), anchor: new google.maps.Point(20, 46) },
         });
-        layersRef.current.push(
-          L.marker(HOTEL_POS, { icon: hotelIcon, zIndexOffset: 1000 })
-            .bindPopup(`<div style="font-family:'Noto Sans KR',sans-serif;"><div style="font-weight:800;color:#f43f5e;font-size:13px;margin-bottom:4px;">🏨 숙소 (매일 베이스캠프)</div><div style="font-weight:700;font-size:14px;margin-bottom:2px;">아카사카 어반 호텔 신관</div><div style="color:#6b7280;font-size:12px;">4/10 체크인 · 4/13 체크아웃</div></div>`)
-            .addTo(map)
-        );
+        hotelMarker.addListener('click', () => {
+          infoWindow.setContent(`<div style="font-family:'Noto Sans KR',sans-serif;min-width:180px;">
+            <div style="font-weight:800;color:#f43f5e;font-size:13px;margin-bottom:4px;">🏨 숙소 (매일 베이스캠프)</div>
+            <div style="font-weight:700;font-size:14px;margin-bottom:2px;">아카사카 어반 호텔 신관</div>
+            <div style="color:#6b7280;font-size:12px;">4/10 체크인 · 4/13 체크아웃</div>
+          </div>`);
+          infoWindow.open(map, hotelMarker);
+        });
+        overlaysRef.current.push(hotelMarker);
 
         // 나리타공항 고정 마커
-        const nrtIcon = L.divIcon({
-          className: '',
-          html: `<div style="background:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;border:3px solid #8B5CF6;box-shadow:0 3px 12px rgba(0,0,0,.3);position:relative;">✈️<div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);background:#8B5CF6;color:#fff;font-size:9px;font-weight:800;border-radius:4px;padding:1px 4px;white-space:nowrap;font-family:'Noto Sans KR',sans-serif;">NRT</div></div>`,
-          iconSize: [36, 42], iconAnchor: [18, 42],
+        const nrtSvg = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="42" viewBox="0 0 36 42">
+            <circle cx="18" cy="18" r="16" fill="white" stroke="#8B5CF6" stroke-width="3"/>
+            <text x="18" y="25" text-anchor="middle" font-size="16">✈️</text>
+            <rect x="2" y="33" width="32" height="9" rx="4" fill="#8B5CF6"/>
+            <text x="18" y="40" text-anchor="middle" font-size="9" fill="white" font-weight="bold" font-family="sans-serif">NRT</text>
+          </svg>`
+        )}`;
+        const nrtMarker = new google.maps.Marker({
+          position: { lat: NRT_POS[0], lng: NRT_POS[1] },
+          map, zIndex: 900,
+          icon: { url: nrtSvg, scaledSize: new google.maps.Size(36, 42), anchor: new google.maps.Point(18, 42) },
         });
-        layersRef.current.push(
-          L.marker(NRT_POS, { icon: nrtIcon, zIndexOffset: 900 })
-            .bindPopup(`<div style="font-family:'Noto Sans KR',sans-serif;"><div style="font-weight:800;color:#8B5CF6;font-size:13px;margin-bottom:4px;">✈️ 나리타국제공항 (NRT)</div><div style="font-size:12px;color:#374151;">🛬 Day1 LJ209 · 17:15 도착</div><div style="font-size:12px;color:#374151;">🛫 Day4 LJ212 · 19:15 출발</div></div>`)
-            .addTo(map)
-        );
+        nrtMarker.addListener('click', () => {
+          infoWindow.setContent(`<div style="font-family:'Noto Sans KR',sans-serif;min-width:160px;">
+            <div style="font-weight:800;color:#8B5CF6;font-size:13px;margin-bottom:4px;">✈️ 나리타국제공항 (NRT)</div>
+            <div style="font-size:12px;color:#374151;">🛬 Day1 LJ209 · 17:15 도착</div>
+            <div style="font-size:12px;color:#374151;">🛫 Day4 LJ212 · 19:15 출발</div>
+          </div>`);
+          infoWindow.open(map, nrtMarker);
+        });
+        overlaysRef.current.push(nrtMarker);
 
-        map.fitBounds([[35.54, 139.55], [35.82, 140.50]], { padding: [20, 20] });
+        // 전체 범위 맞춤
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend({ lat: 35.54, lng: 139.55 });
+        bounds.extend({ lat: 35.82, lng: 140.50 });
+        map.fitBounds(bounds);
       }, []);
 
-      // 지도 초기화 (한 번만)
+      // 지도 초기화 (Google Maps 로드 후 한 번만)
       useEffect(() => {
-        if (mapInst.current) return;
-        const map = L.map(mapRef.current, { center: [35.675, 139.720], zoom: 13 });
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-          maxZoom: 19,
-        }).addTo(map);
+        if (!mapsReady || mapInst.current) return;
+        const map = new google.maps.Map(mapRef.current, {
+          center: { lat: 35.675, lng: 139.720 },
+          zoom: 13,
+          mapTypeId: 'roadmap',
+          gestureHandling: 'greedy',
+        });
         mapInst.current = map;
         applyLayers(map);
-      }, []);
+      }, [mapsReady]);
 
       // travelData 또는 visibleDays 변경 시 레이어 업데이트
       useEffect(() => {
@@ -378,13 +435,13 @@
         applyLayers(mapInst.current);
       }, [travelData, visibleDays]);
 
-      // 홈탭 진입 시: invalidateSize + 대기 중인 업데이트 처리
+      // 홈탭 진입 시: resize + 대기 중인 업데이트 처리
       useEffect(() => {
         if (!show || !mapInst.current) return;
 
         const t1 = setTimeout(() => {
           if (!mapInst.current) return;
-          mapInst.current.invalidateSize();
+          google.maps.event.trigger(mapInst.current, 'resize');
           if (pendingUpdate.current) {
             pendingUpdate.current = false;
             applyLayers(mapInst.current);
@@ -392,13 +449,13 @@
         }, 50);
 
         const t2 = setTimeout(() => {
-          mapInst.current?.invalidateSize();
+          if (mapInst.current) google.maps.event.trigger(mapInst.current, 'resize');
         }, 300);
 
         return () => { clearTimeout(t1); clearTimeout(t2); };
       }, [show]);
 
-      return <div ref={mapRef} id="leaflet-map" className="w-full" />;
+      return <div ref={mapRef} id="google-map" className="w-full" />;
     }
 
     /* ── 홈 뷰 ── */

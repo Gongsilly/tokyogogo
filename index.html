@@ -279,23 +279,14 @@
     function TravelMap({ show, travelData, visibleDays }) {
       const mapRef         = useRef(null);
       const mapInst        = useRef(null);
-      const overlaysRef    = useRef([]);   // Polyline + Marker 목록
+      const overlaysRef    = useRef([]);
       const infoWindowRef  = useRef(null);
       const travelDataRef  = useRef(travelData);
       const visibleDaysRef = useRef(visibleDays);
       const pendingUpdate  = useRef(false);
-      const [mapsReady, setMapsReady] = useState(!!window.google);
 
       travelDataRef.current  = travelData;
       visibleDaysRef.current = visibleDays;
-
-      // Google Maps API 로드 대기
-      useEffect(() => {
-        if (window.google) return;
-        const handler = () => setMapsReady(true);
-        window.addEventListener('google-maps-ready', handler);
-        return () => window.removeEventListener('google-maps-ready', handler);
-      }, []);
 
       const makeSvgUrl = (emoji, bgColor, size, strokeColor) => {
         const s = size;
@@ -412,18 +403,41 @@
         map.fitBounds(bounds);
       }, []);
 
-      // 지도 초기화 (Google Maps 로드 후 한 번만)
+      // 지도 초기화 — 레이스 컨디션 방지: window.google 직접 폴링
       useEffect(() => {
-        if (!mapsReady || mapInst.current) return;
-        const map = new google.maps.Map(mapRef.current, {
-          center: { lat: 35.675, lng: 139.720 },
-          zoom: 13,
-          mapTypeId: 'roadmap',
-          gestureHandling: 'greedy',
-        });
-        mapInst.current = map;
-        applyLayers(map);
-      }, [mapsReady]);
+        if (mapInst.current) return;
+
+        const doInit = () => {
+          if (mapInst.current || !mapRef.current) return;
+          const map = new google.maps.Map(mapRef.current, {
+            center: { lat: 35.675, lng: 139.720 },
+            zoom: 13,
+            mapTypeId: 'roadmap',
+            gestureHandling: 'greedy',
+          });
+          mapInst.current = map;
+          applyLayers(map);
+        };
+
+        if (window.google && window.google.maps) {
+          doInit();
+        } else {
+          const handler = () => doInit();
+          window.addEventListener('google-maps-ready', handler);
+          // 혹시 이미 로드됐지만 이벤트 놓친 경우 폴백 폴링
+          const poll = setInterval(() => {
+            if (window.google && window.google.maps) {
+              clearInterval(poll);
+              window.removeEventListener('google-maps-ready', handler);
+              doInit();
+            }
+          }, 200);
+          return () => {
+            window.removeEventListener('google-maps-ready', handler);
+            clearInterval(poll);
+          };
+        }
+      }, []);
 
       // travelData 또는 visibleDays 변경 시 레이어 업데이트
       useEffect(() => {

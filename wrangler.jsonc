@@ -2,13 +2,22 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tokyogogo",
   "compatibility_date": "2025-09-27",
+  "main": "worker.js",
   "observability": {
     "enabled": true
   },
   "assets": {
-    "directory": "."
+    "directory": ".",
+    "binding": "ASSETS"
   },
   "compatibility_flags": [
     "nodejs_compat"
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tokyogogo-db",
+      "database_id": "3d03719e-ff91-4c0d-8ff5-d4726bbd66a9"
+    }
   ]
 }

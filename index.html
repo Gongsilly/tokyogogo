@@ -767,7 +767,8 @@
       return '📝';
     }
 
-    function ChecklistView() {
+    function ChecklistView({ dbData }) {
+      const CHECKLIST_DATA = dbData || CHECKLIST;
       const [people, setPeople] = useState(() => {
         try {
           const saved = localStorage.getItem(PEOPLE_KEY);
@@ -778,8 +779,8 @@
       const [clData, setClData] = useState(() => {
         try {
           const saved = localStorage.getItem(CL_KEY);
-          return saved ? JSON.parse(saved) : CHECKLIST;
-        } catch { return CHECKLIST; }
+          return saved ? JSON.parse(saved) : CHECKLIST_DATA;
+        } catch { return CHECKLIST_DATA; }
       });
 
       const [ck, setCk] = useState(() => {
@@ -1055,50 +1056,73 @@
 
     function App() {
       const [tab, setTab] = useState('home');
+      const [travelData, setTravelData] = useState(null); // null = 로딩 중
+      const [checklist, setChecklist]   = useState(null);
+      const [loading, setLoading]       = useState(true);
 
-      const DATA_VERSION = '2025-v3'; // 데이터 구조 변경 시 버전 올리기
-      const [travelData, setTravelData] = useState(() => {
-        try {
-          const ver   = localStorage.getItem('tokyogogo-version');
-          const saved = localStorage.getItem('tokyogogo-travel');
-          if (saved && ver === DATA_VERSION) return JSON.parse(saved);
-          // 버전 불일치 or 저장 없음 → 초기 데이터
-          localStorage.setItem('tokyogogo-version', DATA_VERSION);
-          localStorage.removeItem('tokyogogo-travel');
-          return TRAVEL_INITIAL;
-        } catch { return TRAVEL_INITIAL; }
-      });
-
-      const saveTravel = useCallback((data) => {
-        setTravelData(data);
-        localStorage.setItem('tokyogogo-travel', JSON.stringify(data));
+      // D1에서 초기 데이터 로드
+      useEffect(() => {
+        Promise.all([
+          fetch('/api/places').then(r => r.json()),
+          fetch('/api/checklist').then(r => r.json()),
+        ]).then(([places, cl]) => {
+          // places = [[...day0], [...day1], ...]  API 반환 그대로
+          const merged = DAY_CFG.map((cfg, i) => ({ ...cfg, places: places[i] || [] }));
+          setTravelData(merged);
+          setChecklist(cl);
+          setLoading(false);
+        }).catch(() => {
+          // API 실패 시 하드코딩 폴백
+          setTravelData(TRAVEL_INITIAL);
+          setChecklist(null);
+          setLoading(false);
+        });
       }, []);
 
-      const handleSavePlace = (dayIdx, updated) => {
-        const next = travelData.map((day, di) =>
+      const handleSavePlace = async (dayIdx, updated) => {
+        await fetch(`/api/places/${updated.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...updated, pos: updated.pos }),
+        });
+        setTravelData(prev => prev.map((day, di) =>
           di !== dayIdx ? day : { ...day, places: day.places.map(p => p.id === updated.id ? updated : p) }
-        );
-        saveTravel(next);
+        ));
       };
 
-      const handleDeletePlace = (dayIdx, id) => {
-        const next = travelData.map((day, di) =>
+      const handleDeletePlace = async (dayIdx, id) => {
+        await fetch(`/api/places/${id}`, { method: 'DELETE' });
+        setTravelData(prev => prev.map((day, di) =>
           di !== dayIdx ? day : { ...day, places: day.places.filter(p => p.id !== id) }
-        );
-        saveTravel(next);
+        ));
       };
 
-      const handleAddPlace = (dayIdx, newPlace) => {
-        const next = travelData.map((day, di) =>
-          di !== dayIdx ? day : { ...day, places: [...day.places, newPlace] }
-        );
-        saveTravel(next);
+      const handleAddPlace = async (dayIdx, newPlace) => {
+        const res = await fetch('/api/places', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...newPlace, day_idx: dayIdx }),
+        });
+        const { id } = await res.json();
+        setTravelData(prev => prev.map((day, di) =>
+          di !== dayIdx ? day : { ...day, places: [...day.places, { ...newPlace, id }] }
+        ));
       };
 
-      const handleReset = () => {
-        localStorage.removeItem('tokyogogo-travel');
-        setTravelData(TRAVEL_INITIAL);
+      const handleReset = async () => {
+        const res = await fetch('/api/places').then(r => r.json());
+        const merged = DAY_CFG.map((cfg, i) => ({ ...cfg, places: res[i] || [] }));
+        setTravelData(merged);
       };
+
+      if (loading) return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <div className="text-center">
+            <div className="text-4xl mb-3">🌸</div>
+            <div className="text-gray-500 font-medium text-sm">일정을 불러오는 중...</div>
+          </div>
+        </div>
+      );
 
       return (
         <div className="min-h-screen bg-slate-50">
@@ -1133,7 +1157,7 @@
             {tab === 'd1' && <DayView idx={1} travelData={travelData} />}
             {tab === 'd2' && <DayView idx={2} travelData={travelData} />}
             {tab === 'd3' && <DayView idx={3} travelData={travelData} />}
-            {tab === 'checklist' && <ChecklistView />}
+            {tab === 'checklist' && <ChecklistView dbData={checklist} />}
             {tab === 'edit' && (
               <EditView
                 travelData={travelData}

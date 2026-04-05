@@ -26,3 +26,12 @@ CREATE TABLE IF NOT EXISTS checklist_items (
   text       TEXT    NOT NULL,
   sort_order INTEGER NOT NULL
 );
+
+-- ── 장소 이미지 ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS place_images (
+  id         TEXT    PRIMARY KEY,
+  place_id   TEXT    NOT NULL,
+  filename   TEXT    NOT NULL,
+  data       TEXT    NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);

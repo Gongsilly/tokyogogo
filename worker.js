@@ -78,6 +78,36 @@ export default {
         return json({ success: true });
       }
 
+      // GET /api/places/:id/images — 장소 이미지 목록
+      const imagesListMatch = pathname.match(/^\/api\/places\/([^/]+)\/images$/);
+      if (imagesListMatch && request.method === 'GET') {
+        const placeId = imagesListMatch[1];
+        const rows = await env.DB.prepare(
+          'SELECT id, place_id, filename, data, created_at FROM place_images WHERE place_id = ? ORDER BY created_at'
+        ).bind(placeId).all();
+        return json(rows.results);
+      }
+
+      // POST /api/images/:placeId — 이미지 업로드
+      const imageUploadMatch = pathname.match(/^\/api\/images\/([^/]+)$/);
+      if (imageUploadMatch && request.method === 'POST') {
+        const placeId = imageUploadMatch[1];
+        const { filename, data } = await request.json();
+        const id = 'img' + Math.random().toString(36).slice(2, 10);
+        await env.DB.prepare(
+          'INSERT INTO place_images (id, place_id, filename, data) VALUES (?,?,?,?)'
+        ).bind(id, placeId, filename, data).run();
+        return json({ success: true, id });
+      }
+
+      // DELETE /api/images/:imageId — 이미지 삭제
+      const imageDeleteMatch = pathname.match(/^\/api\/images\/([^/]+)$/);
+      if (imageDeleteMatch && request.method === 'DELETE') {
+        const imageId = imageDeleteMatch[1];
+        await env.DB.prepare('DELETE FROM place_images WHERE id = ?').bind(imageId).run();
+        return json({ success: true });
+      }
+
       // GET /api/checklist — 체크리스트 조회
       if (pathname === '/api/checklist' && request.method === 'GET') {
         const cats = await env.DB.prepare(

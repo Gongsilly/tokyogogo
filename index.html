@@ -153,7 +153,7 @@
       );
     }
 
-    function PlaceCard({ place, color }) {
+    function PlaceCard({ place, color, onClick }) {
       const url = `https://www.google.com/maps/search/${encodeURIComponent(place.map || place.name)}`;
       return (
         <div className="flex gap-2 sm:gap-3 group place-card">
@@ -165,7 +165,10 @@
             <div className="w-px flex-1 bg-gray-200 mt-1" />
           </div>
           <div className="flex-1 pb-3 min-w-0">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm group-hover:shadow-md transition-all p-3">
+            <div
+              className="bg-white rounded-xl border border-gray-100 shadow-sm group-hover:shadow-md transition-all p-3 cursor-pointer active:scale-95"
+              onClick={onClick}
+            >
               <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
                   <span className="font-bold text-gray-800 text-sm leading-snug block mb-1">{place.name}</span>
@@ -173,11 +176,55 @@
                   <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{place.detail}</p>
                 </div>
                 <a href={url} target="_blank" rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
                   className="shrink-0 text-xs font-semibold bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-600 px-2.5 py-1.5 rounded-lg transition-all border border-blue-100 whitespace-nowrap">
                   📍 지도
                 </a>
               </div>
             </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ── 장소 상세 팝업 ── */
+    function PlaceDetailModal({ place, dayConfig, onClose }) {
+      const url = `https://www.google.com/maps/search/${encodeURIComponent(place.map || place.name)}`;
+      const cat = CAT[place.cat] || {};
+      return (
+        <div className="modal-overlay" onClick={onClose}>
+          <div className="modal-box fade-in" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
+            {/* 헤더 */}
+            <div className={`bg-gradient-to-r ${dayConfig.grad} rounded-xl p-4 mb-4 -mx-1`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-white/80">{dayConfig.day} · {dayConfig.date} ({dayConfig.week})</span>
+                <button onClick={onClose} className="text-white/70 hover:text-white text-lg leading-none">✕</button>
+              </div>
+              <div className="text-3xl mb-1">{cat.icon || '📍'}</div>
+              <div className="font-extrabold text-white text-lg leading-tight">{place.name}</div>
+              {place.time && (
+                <div className="text-white/80 text-sm mt-1">⏰ {place.time}</div>
+              )}
+            </div>
+
+            {/* 카테고리 */}
+            <div className="mb-3">
+              <CatBadge cat={place.cat} />
+            </div>
+
+            {/* 설명 */}
+            {place.detail && (
+              <div className="bg-gray-50 rounded-xl p-3 mb-4">
+                <p className="text-sm text-gray-700 leading-relaxed">{place.detail}</p>
+              </div>
+            )}
+
+            {/* 지도 버튼 */}
+            <a href={url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-3 rounded-xl font-bold text-sm text-white transition-all"
+              style={{ background: dayConfig.color }}>
+              📍 구글맵에서 보기
+            </a>
           </div>
         </div>
       );
@@ -619,6 +666,7 @@
     /* ── 일별 뷰 ── */
     function DayView({ idx, travelData }) {
       const d = travelData[idx];
+      const [detailPlace, setDetailPlace] = useState(null);
       return (
         <div className="fade-in pb-24 pt-4 px-4">
           <div className="max-w-xl mx-auto">
@@ -632,12 +680,20 @@
                 <div className="text-white/80 text-sm font-bold shrink-0">{d.places.length}곳</div>
               </div>
             </div>
+            <p className="text-xs text-gray-400 text-center mb-3">💡 카드를 탭하면 상세 정보를 볼 수 있어요</p>
             <div>
               {d.places.map((p, i) => (
-                <PlaceCard key={p.id || i} place={p} color={d.color} />
+                <PlaceCard key={p.id || i} place={p} color={d.color} onClick={() => setDetailPlace(p)} />
               ))}
             </div>
           </div>
+          {detailPlace && (
+            <PlaceDetailModal
+              place={detailPlace}
+              dayConfig={d}
+              onClose={() => setDetailPlace(null)}
+            />
+          )}
         </div>
       );
     }
